@@ -1,0 +1,921 @@
+# ==============================================================================
+#                      CustomLootX 自訂可疑方塊插件 配置檔
+# ==============================================================================
+
+# 聊天室訊息前綴
+prefix: "&8[&6CustomLootX&8] &r"
+
+# ------------------------------------------------------------------------------
+# 音效設定
+# 支援原版 Minecraft 音效名稱，若無效則使用預設音效
+# ------------------------------------------------------------------------------
+sound:
+  click: "UI_BUTTON_CLICK"           # 點擊介面按鈕時的音效
+  success: "ENTITY_PLAYER_LEVELUP"   # 操作成功音效 (如升級、成功設定)
+  error: "ENTITY_VILLAGER_NO"        # 發生錯誤或數值無效時的音效
+  save: "BLOCK_ENCHANTMENT_TABLE_USE"# 步驟精靈儲存成功時的音效
+  reset: "BLOCK_SAND_PLACE"          # 方塊自動重置復原時的音效
+
+# ------------------------------------------------------------------------------
+# 系統與戰鬥功能設定
+# ------------------------------------------------------------------------------
+settings:
+  spawner:
+    # 底部進度提示顯示文字格式 (%killed%: 已擊殺數, %total%: 目標總數, %active%: 場上存活數)
+    actionbar-format: "&e試煉戰鬥中: &a%killed%/%total% &7(場上: &f%active% &7隻)"
+    # 試煉完成提示音效設定 (可開啟/關閉，並自訂實際播放的音效，預設為關閉)
+    victory-sound:
+      enabled: false                       # 是否播放挑戰完成提示音效 (預設: false 關閉)
+      sound: "UI_TOAST_CHALLENGE_COMPLETE" # 實際播放的音效名稱 (支援原版 Minecraft 音效名稱)
+      volume: 1.0                          # 音效音量 (0.0 ~ 2.0)
+      pitch: 1.2                           # 音效音調 (0.5 ~ 2.0)
+
+# ------------------------------------------------------------------------------
+# 聊天室訊息
+# 出現於玩家/管理員執行指令、輸入數值或介面互動時的提示訊息
+# ------------------------------------------------------------------------------
+messages:
+  # 權限不足提示
+  no-permission: "&c你沒有權限執行此指令！"
+
+  # 當指令只能由玩家執行
+  only-player: "&c此指令只能由玩家執行！"
+
+  # 找不到指定的配置檔案
+  template-not-found: "&c找不到名為 &e%name% &c的配置！"
+
+  # 配置檔案名稱已存在
+  template-exists: "&c已存在名為 &e%name% &c的配置檔案！"
+
+  # /clx create 執行成功時給予玩家的提示 (支援 %type% / %類型(中文)% 佔位符)
+  template-created: "&a已創建自訂%type%方塊！"
+
+  # /clx delete 刪除配置成功
+  template-deleted: "&a已成功刪除配置 &e%name%&a！"
+
+  # 步驟精靈儲存配置成功時
+  save-success: "&a已成功儲存自訂可疑方塊配置: &e%name%&a！"
+
+  # 步驟精靈儲存失敗時
+  save-failed: "&c儲存失敗，請檢查後台日誌！"
+
+  # 掉落池總機率不等於 100% 時的錯誤提示
+  sum-not-100: "&c儲存失敗！所有掉落物機率總和必須恰好為 100.00%（目前總和: &e%total%&c，差額: &e%diff%&c）！"
+
+  # 玩家嘗試放置尚未完成設定的空白方塊時的警告
+  empty-block-warning: "&c此方塊尚未完成設定！"
+
+  # /clx give 給予成功提示
+  give-success: "&a已給予玩家 &e%player% &f%amount% 個 &e[%name%] &a自訂可疑方塊！"
+
+  # /clx give 目標玩家收到方塊時的提示
+  receive-success: "&a你收到了 &f%amount% 個 &e[%name%] &a自訂可疑方塊！"
+
+  # /clx give 給予自己時的補充操作提示
+  give-self-tip: "&7(手持對空氣右鍵可重新編輯此配置，對地面右鍵可直接放置)"
+
+  # /clx create 語法錯誤提示
+  create-usage: "&c用法: /%label% create <suspicious|vault|spawner>"
+
+  # /clx give 語法錯誤提示
+  give-usage: "&c用法: /%label% give <suspicious|vault|spawner> <名稱> [給誰] [數量]"
+
+  # 主控台執行 /clx give 未填寫目標玩家時的錯誤
+  give-console-target-required: "&c主控台執行時必須指定目標玩家！用法: /%label% give <suspicious|vault|spawner> <名稱> <給誰> [數量]"
+
+  # 找不到指定的目標玩家
+  player-not-found: "&c找不到目標玩家: %player%"
+
+  # /clx edit 語法錯誤提示
+  edit-usage: "&c用法: /%label% edit <suspicious|vault|spawner> <名稱>"
+
+  # /clx delete 語法錯誤提示
+  delete-usage: "&c用法: /%label% delete <suspicious|vault|spawner> <名稱>"
+
+  # /clx reload 重載成功提示
+  reload-success: "&aCustomLootX 設定與所有資料重載完成！"
+
+  # 創建全新寶庫草稿物品提示
+  vault-template-created: "&a已創建全新自訂試煉寶庫！"
+
+  # 寶庫鑰匙不符
+  vault-key-mismatch: "&c解鎖失敗！此寶庫需要鑰匙: &e%key% &c才能開啟！"
+
+  # 寶庫冷卻中
+  vault-cooldown: "&c此寶庫冷卻中！剩餘 &e%time% &c後可再次開啟。"
+
+  # 終生一次已領取
+  vault-already-rewarded: "&c你已經開啟過此寶庫，無法再次領取戰利品！"
+
+  # 鑰匙為空
+  vault-key-empty: "&c請先在中間放入一把有效的鑰匙物品！"
+
+  # 創建全新試煉生怪磚草稿物品提示
+  spawner-template-created: "&a已創建全新自訂試煉生怪磚！"
+
+  # 生怪磚冷卻中
+  spawner-in-cooldown: "&c此試煉生怪磚冷卻中！剩餘 &e%time% 秒&c後可再次挑戰。"
+
+  # 生怪磚終生一次已領取
+  spawner-already-completed: "&c你已經完成過此試煉挑戰，無法再次領取獲勝獎勵！"
+
+  # 生怪磚就緒提醒
+  spawner-ready-hint: "&a此試煉生怪磚已就緒！進入感應範圍即可啟動挑戰 (怪物: &e%mob%&a)！"
+
+  # 生怪磚戰鬥勝利
+  spawner-victory: "&a✔ 恭喜完成試煉挑戰！獲勝獎勵已噴發！"
+
+  # 生怪磚配置儲存成功
+  spawner-save-success: "&a已成功儲存試煉生怪磚配置: &e%name%&a！"
+
+  # 聊天室輸入機率提示
+  input-prompt: "&e請在聊天室輸入此物品的機率 (0.01 ~ 100.00)，輸入 &ccancel &e取消："
+
+  # 聊天室輸入機率數值無效提示
+  input-invalid: "&c輸入數值無效，請輸入介於 0.01 到 100.00 的有效數字（最多兩位小數）！"
+
+  # 聊天室調整機率成功提示
+  input-success: "&a已將物品機率調整為: &e%chance%&a！"
+
+  # 聊天室輸入配置名稱提示
+  name-prompt: "&e請在聊天室輸入配置識別名稱 (英文字母、數字與底線)，輸入 &ccancel &e取消："
+
+  # 聊天室輸入配置名稱無效提示
+  name-invalid: "&c名稱無效！只能包含英文字母、數字與底線，且不能空白。"
+
+  # 聊天室輸入的名稱已被其他配置使用提示
+  name-already-used: "&c該名稱已被其他配置使用，請使用不同的名稱！"
+
+  # 取消聊天室輸入提示
+  input-cancelled: "&e已取消輸入操作。"
+
+  # 聊天室輸入重置時間提示
+  time-prompt: "&e請在聊天室輸入自動重置時間（單位：分鐘，請輸入大於等於 1 的整數），輸入 &ccancel &e取消："
+
+  # 重置時間小於 1 分鐘時的錯誤提示
+  time-min-invalid: "&c時間必須至少為 1 分鐘！"
+
+  # 重置時間非整數時的錯誤提示
+  time-invalid: "&c請輸入有效的整數數字！"
+
+  # 聊天室輸入每次彈出數量提示
+  roll-prompt: "&e請在聊天室輸入每次彈出數量 (1 ~ 64)，輸入 &ccancel &e取消："
+
+  # 彈出數量無效提示
+  roll-invalid: "&c彈出數量無效！請輸入介於 1 到 64 的整數。"
+
+  # 聊天室輸入鑰匙自訂名稱提示
+  key-name-prompt: "&e請在聊天室輸入鑰匙自訂名稱 (支援彩色代碼 &)，輸入 &ccancel &e取消："
+
+  # 聊天室輸入鑰匙說明提示
+  key-lore-prompt: "&e請在聊天室輸入鑰匙自訂說明 (支援彩色代碼 &)，輸入 &ccancel &e取消："
+
+  # 成功製作防偽鑰匙提示
+  key-craft-success: "&a已成功製作專屬防偽鑰匙！已將 1 把鑰匙發送至您的背包。"
+
+  # 複製外觀成功
+  key-copy-success: "&a已成功套用手持物品的外觀材質與模型！"
+
+  # 複製外觀未拿物品
+  key-copy-empty: "&c請先用滑鼠手持物品後再點擊此格以複製外觀！"
+
+  # /clx key 語法提示
+  cmd-key-usage: "&c用法: /%label% key <寶庫名稱> [玩家] [數量]"
+
+  # 給予鑰匙成功提示
+  cmd-key-give: "&a已給予玩家 &e%player% &f%amount% 把 &e[%name%] &a專屬防偽鑰匙！"
+
+  # 收到鑰匙提示
+  cmd-key-receive: "&a你收到了 &f%amount% 把 &e[%name%] &a專屬防偽鑰匙！"
+
+# ------------------------------------------------------------------------------
+# 指令清單輸出
+# 用於 /clx help 與 /clx list 指令的輸出外觀
+# ------------------------------------------------------------------------------
+commands:
+  help:
+    header: "&8============ &6CustomLootX 指令清單 &8============"
+    create: "&e/%label% create <suspicious|vault> &7- 創建全新空白可疑方塊或試煉寶庫"
+    give: "&e/%label% give <suspicious|vault> <名稱> [給誰] [數量] &7- 取得或給予已設定好的方塊"
+    key: "&e/%label% key <寶庫名稱> [給誰] [數量] &7- 發放指定寶庫的專屬防偽鑰匙"
+    edit: "&e/%label% edit <suspicious|vault> <名稱> &7- 直接開啟指定配置的步驟引導介面"
+    list: "&e/%label% list &7- 列出所有已儲存的可疑方塊配置"
+    delete: "&e/%label% delete <名稱> &7- 刪除指定的配置檔案"
+    reload: "&e/%label% reload &7- 重新讀取設定與資料檔"
+    footer: "&8=============================================="
+
+  list:
+    header: "&8========== &6CustomLootX 已儲存配置清單 &8=========="
+    empty: "&7目前沒有任何已儲存的配置。使用 &e/%label% create &7創建一個！"
+    item: "&f- &e%name% &7(%type%&7) %chance% %reset% &7- 包含 &f%count% &7件物品"
+    type-sand: "&e沙"
+    type-gravel: "&7礫"
+    valid-chance: "&a[100.00%]"
+    invalid-chance: "&c[%chance%]"
+    reset-on: "&b[重置: %minutes%m]"
+    reset-off: "&8[無重置]"
+    footer: "&8=================================================="
+
+# ------------------------------------------------------------------------------
+# 方塊物品名稱與說明
+# 玩家手持的全新草稿物品或已儲存配置物品的展示外觀
+# ------------------------------------------------------------------------------
+items:
+  blank:
+    name-sand: "&f[全新創建] &e自訂可疑沙"
+    name-gravel: "&f[全新創建] &7自訂可疑礫石"
+    lore:
+      - "&8================================"
+      - "&7這是一個新創建的自訂可疑方塊。"
+      - "&e手持點擊空氣右鍵 &f即可啟動步驟式編輯精靈！"
+      - "&c提示：未完成所有步驟設定前無法放置於地上。"
+      - "&8================================"
+
+  configured:
+    type-sand: "可疑沙"
+    type-gravel: "可疑礫石"
+    reset-enabled: "&a開啟 (&f%minutes% 分鐘&a)"
+    reset-disabled: "&c關閉"
+    air-item-name: "&c[無掉落]"
+    # %name%: 配置名稱, %type%: 材質, %reset%: 重置狀態, %count%: 掉落物總數
+    lore-header:
+      - "&8================================"
+      - "&e配置名稱: &f%name%"
+      - "&e方塊種類: &f%type%"
+      - "&e重置模式: %reset%"
+      - "&e掉落項目: &f%count% 種 (總計 100.00%)"
+    # %item%: 物品名稱, %chance%: 機率
+    lore-item-format: " &7▪ &f%item%: &a%chance%"
+    # %more%: 剩餘未顯示的物品數量
+    lore-item-more: " &7▪ ...以及其他 %more% 項物品"
+    lore-footer:
+      - "&8================================"
+      - "&e手持點擊空氣右鍵 &7可重新進入步驟編輯此配置"
+      - "&a對地面右鍵 &7可直接放置於世界上"
+      - "&8================================"
+
+  # 試煉寶庫物品展示與說明
+  vault:
+    blank-name-normal: "&f[全新創建] &6自訂試煉寶庫"
+    blank-name-ominous: "&f[全新創建] &5自訂不祥試煉寶庫"
+    blank-lore:
+      - "&8================================"
+      - "&7這是一個新創建的自訂試煉寶庫。"
+      - "&e手持點擊空氣右鍵 &f即可啟動步驟式編輯精靈！"
+      - "&c提示：未完成所有步驟設定前無法放置於地上。"
+      - "&8================================"
+    template-name-normal: "&6[試煉寶庫] &e%name%"
+    template-name-ominous: "&5[不祥寶庫] &d%name%"
+    lore-header:
+      - "&8================================"
+      - "&e配置名稱: &f%name%"
+      - "&e寶庫類型: &f%type%"
+      - "&e解鎖鑰匙: &f%key%"
+      - "&e重置模式: &f%mode% %time%"
+      - "&e每次出貨: &a%rolls% 件物品"
+      - "&e掉落項目: &f%count% 種 (總計 100.00%)"
+    lore-footer:
+      - "&8================================"
+      - "&e手持點擊空氣右鍵 &7可重新進入步驟編輯此配置"
+      - "&a對地面右鍵 &7可直接放置於世界上"
+      - "&8================================"
+
+  # 試煉生怪磚物品展示與說明
+  spawner:
+    blank-name-normal: "&f[全新創建] &6自訂試煉生怪磚"
+    blank-name-ominous: "&f[全新創建] &5自訂不祥試煉生怪磚"
+    blank-lore:
+      - "&8================================"
+      - "&7這是一個新創建的自訂試煉生怪磚。"
+      - "&e手持點擊空氣右鍵 &f即可啟動步驟式編輯精靈！"
+      - "&c提示：未完成所有步驟設定前無法放置於地上。"
+      - "&8================================"
+    template-name-normal: "&6[試煉生怪磚] &e%name%"
+    template-name-ominous: "&5[不祥生怪磚] &d%name%"
+    lore-header:
+      - "&8================================"
+      - "&e配置名稱: &f%name%"
+      - "&e生怪磚類型: &f%type%"
+      - "&e生成怪物: &c%mob%"
+      - "&e波次配置: &f總共 %total% 隻 (同時上限 %sim% 隻)"
+      - "&e生成間隔: &f%delay% 秒 &7| &e感應範圍: &f%range% 格"
+      - "&e重置模式: &f%mode% %time%"
+      - "&e獲勝獎勵: &a%rolls% 件物品 (掉落池 %count% 種)"
+    lore-footer:
+      - "&8================================"
+      - "&e手持點擊空氣右鍵 &7可重新進入步驟編輯此配置"
+      - "&a對地面右鍵 &7可直接放置於世界上"
+      - "&8================================"
+
+# ------------------------------------------------------------------------------
+# GUI 步驟精靈介面
+# 所有箱子介面的標題、按鈕名稱與說明
+# ------------------------------------------------------------------------------
+gui:
+  # 通用按鈕與導航文字
+  common:
+    filler-name: " "
+    back-to-step1-name: "&e⬅ 上一步 &f(基本設定)"
+    back-to-step1-lore:
+      - "&7返回 [步驟 1/4] 修改名稱或材質"
+    back-to-step2-name: "&e⬅ 上一步 &f(重置模式)"
+    back-to-step2-lore:
+      - "&7返回 [步驟 2/4] 修改重置模式"
+    back-to-step3-name: "&e⬅ 上一步 (掉落池)"
+    back-to-step3-lore:
+      - "&7返回 [步驟 3/4] 調整物品與機率"
+    # %page%: 目標頁碼
+    next-page-name: "&e下一頁"
+    next-page-lore:
+      - "&7前往第 %page% 頁"
+    prev-page-name: "&e上一頁"
+    prev-page-lore:
+      - "&7前往第 %page% 頁"
+    cancel-name: "&c取消編輯"
+    cancel-lore:
+      - "&7放棄本次編輯並關閉介面"
+    return-to-pool-name: "&e⬅ 返回掉落池"
+    return-to-pool-lore:
+      - "&7回到掉落物箱子總覽"
+
+  # 步驟 1/4：基本設定與名稱
+  step1:
+    title: "&8[步驟 1/4] 基本設定與名稱"
+    type-button-name: "&6方塊種類"
+    type-sand-desc: "&e可疑沙"
+    type-gravel-desc: "&7可疑礫石"
+    type-sand-short: "可疑沙"
+    type-gravel-short: "可疑礫石"
+    # %type%: 當前類型描述, %other_type%: 切換後類型描述
+    type-button-lore:
+      - "&7目前設定: %type%"
+      - "&e點擊切換為: &f%other_type%"
+    name-button-name: "&e配置名稱"
+    name-unset: "<未設定>"
+    name-click-to-set: "&c[未設定]"
+    # %path%: 檔案名稱, %current_name%: 目前名稱
+    name-button-lore:
+      - "&7目前名稱: %current_name%"
+      - "&7"
+      - "&e點擊此處 &f在聊天室輸入名稱"
+      - "&8(只能包含英文字母、數字與底線)"
+    next-ready-name: "&a下一步 ➜ &f(重置模式)"
+    next-ready-lore:
+      - "&7前往 [步驟 2/4] 設定自動重置模式"
+      - "&a點擊前往下一步"
+    next-not-ready-name: "&c下一步 ➜ &7(請先設定名稱)"
+    next-not-ready-lore:
+      - "&c必須先設定有效的配置名稱"
+      - "&7請點擊中間的【配置名稱】進行輸入"
+
+  # 步驟 2/4：重置模式
+  step2:
+    title: "&8[步驟2/4] 重置模式"
+    toggle-button-name: "&6自動重置功能"
+    status-on: "&a✔ 開啟"
+    status-off: "&c✖ 關閉"
+    # 自動重置開關按鈕圖示材質
+    icon-on: "LIME_DYE"
+    icon-off: "RED_DYE"
+    # %status%: 當前重置狀態
+    toggle-button-lore:
+      - "&7方塊被刷完變為普通沙/礫石後"
+      - "&7在指定時間後自動復原並重抽掉落物"
+      - "&7"
+      - "&7當前狀態: %status%"
+      - "&7"
+      - "&e點擊切換 開啟 / 關閉"
+    time-button-name: "&e重置間隔時間"
+    # %minutes%: 分鐘數
+    time-button-lore:
+      - "&7目前設定: &a%minutes% &5分鐘"
+      - "&7"
+      - "&e點擊此處 &f開啟時間調整畫面"
+    next-button-name: "&a下一步 ➜ &f(掉落池設定)"
+    next-button-lore:
+      - "&7前往 [步驟 3/4] 設定掉落物與機率"
+      - "&a點擊前往下一步"
+
+  # 步驟 2 重置時間增減畫面
+  step2-time:
+    title: "&8重置間隔時間設定"
+    # %minutes%: 分鐘數
+    clock-name: "&e目前重置時間: &a%minutes% &e分鐘"
+    clock-lore:
+      - "&7方塊被刷完變為普通方塊後"
+      - "&7經過此時間將自動復原並重抽戰利品"
+      - "&7"
+      - "&e請點擊兩側按鈕直接增減時間"
+      - "&7(最低設定為 1 分鐘)"
+    btn-minus-10-name: "&c-10 分鐘"
+    btn-minus-10-lore:
+      - "&7點擊減少 10 分鐘"
+    btn-minus-5-name: "&c-5 分鐘"
+    btn-minus-5-lore:
+      - "&7點擊減少 5 分鐘"
+    btn-minus-1-name: "&c-1 分鐘"
+    btn-minus-1-lore:
+      - "&7點擊減少 1 分鐘"
+    btn-plus-1-name: "&a+1 分鐘"
+    btn-plus-1-lore:
+      - "&7點擊增加 1 分鐘"
+    btn-plus-5-name: "&a+5 分鐘"
+    btn-plus-5-lore:
+      - "&7點擊增加 5 分鐘"
+    btn-plus-10-name: "&a+10 分鐘"
+    btn-plus-10-lore:
+      - "&7點擊增加 10 分鐘"
+    chat-input-name: "&b聊天室直接輸入"
+    chat-input-lore:
+      - "&7點擊後在聊天室直接輸入數字"
+      - "&7例如輸入: &e15 &7(即為 15 分鐘)"
+    back-button-name: "&e⬅ 返回 [步驟2/4] 重置模式"
+    back-button-lore:
+      - "&7儲存時間並返回重置模式設定"
+    confirm-button-name: "&a✔ 完成並返回"
+    confirm-button-lore:
+      - "&7返回 [步驟2/4] 重置模式"
+
+  # 步驟 3/4：掉落物與機率設定
+  step3:
+    title: "&8[步驟 3/4] 掉落物與機率設定"
+    air-item-name: "&c[落空 / 無掉落]"
+    # %chance%: 機率百分比
+    item-lore-format:
+      - ""
+      - "&8------------------------"
+      - "&e設定機率: &a%chance%"
+      - "&7"
+      - "&e[點擊] &f設定機率或移除此物品"
+      - "&8------------------------"
+    guide-name: "&e【放入物品操作說明】"
+    guide-lore:
+      - "&7▪ 可直接拿起背包物品點擊上方空格放入"
+      - "&7▪ 或點擊背包物品快速放入"
+      - "&7▪ 點擊格子可開啟機率調整與管理畫面 (內含移除按鈕)"
+    add-air-name: "&c新增「無掉落」項目"
+    add-air-lore:
+      - "&7在獎池中增加一項刷空的機率"
+      - "&7當抽中此項目時，方塊將不掉落任何物品"
+      - "&e點擊新增"
+    next-valid-name: "&a下一步 ➜ &f(設定確認)"
+    next-valid-lore:
+      - "&7機率總和已達 100.00%"
+      - "&7前往 [步驟 4/4] 檢查所有設定並確認送出"
+      - "&a點擊前往下一步"
+    # %total%: 目前總機率, %diff%: 差額
+    next-invalid-name: "&c下一步 ➜ &7(機率非 100%)"
+    next-invalid-lore:
+      - "&c目前總機率: &e%total%"
+      - "&c距離 100.00% 尚差: &e%diff%"
+      - "&c機率總和必須恰好為 100.00% 才能前往確認頁面！"
+
+  # 物品單獨機率設定子頁面
+  chance:
+    # %item%: 物品名稱
+    title-format: "&8[%item%] 機率設定"
+    default-item-name: "物品"
+    air-item-name: "落空"
+    air-display-name: "&c[無掉落]"
+    # %chance%: 該物品機率, %total%: 總機率, %diff%: 距離 100% 差額
+    preview-lore:
+      - ""
+      - "&8------------------------"
+      - "&e此物品設定機率: &a%chance%"
+      - "&7所有物品總和: %total%"
+      - "&7距離 100% 尚差: %diff%"
+      - "&8------------------------"
+    btn-minus-10-name: "&c-10.00%"
+    btn-minus-10-lore:
+      - "&7點擊將此物品機率減少 10%"
+    btn-minus-1-name: "&c-1.00%"
+    btn-minus-1-lore:
+      - "&7點擊將此物品機率減少 1%"
+    btn-minus-01-name: "&c-0.10%"
+    btn-minus-01-lore:
+      - "&7點擊將此物品機率減少 0.1%"
+    btn-minus-001-name: "&c-0.01%"
+    btn-minus-001-lore:
+      - "&7點擊將此物品機率減少 0.01%"
+    btn-plus-001-name: "&a+0.01%"
+    btn-plus-001-lore:
+      - "&7點擊將此物品機率增加 0.01%"
+    btn-plus-01-name: "&a+0.10%"
+    btn-plus-01-lore:
+      - "&7點擊將此物品機率增加 0.1%"
+    btn-plus-1-name: "&a+1.00%"
+    btn-plus-1-lore:
+      - "&7點擊將此物品機率增加 1%"
+    btn-plus-10-name: "&a+10.00%"
+    btn-plus-10-lore:
+      - "&7點擊將此物品機率增加 10%"
+    chat-input-name: "&b聊天室精確輸入"
+    chat-input-lore:
+      - "&7點擊後在聊天室直接輸入數字"
+      - "&7支援範圍: &e0.01 ~ 100.00"
+      - "&7例如輸入: &f15.25"
+    fill-100-name: "&6一鍵補齊至 100%"
+    # %diff%: 需補齊差額
+    fill-100-lore:
+      - "&7自動將剩餘的差額加至此物品"
+      - "&7目前尚需補齊: &e%diff%"
+    remove-name: "&c從獎池移除此物品"
+    remove-lore:
+      - "&7將此項目從自訂可疑方塊中刪除"
+
+  # 步驟 4/4：設定確認
+  step4:
+    title: "&8[步驟 4/4] 設定確認"
+    # %type%: 材質名稱
+    step1-type-name: "&e【步驟一】方塊材質: &f%type%"
+    step1-type-lore:
+      - "&7目前選擇的方塊類型: &f%type%"
+      - "&7"
+      - "&e點擊可返回步驟一修改"
+    # %name%: 配置名稱, %display%: 顯示名稱
+    step1-name-name: "&e【步驟一】配置名稱: &a%name%"
+    step1-name-lore:
+      - "&7配置檔案路徑: &f/data/suspicious/%name%.yml"
+      - "&7遊戲內標題已自動同步為: &f%display%"
+      - "&7"
+      - "&e點擊可返回步驟一修改"
+    # %status%: 重置狀態
+    step2-reset-name: "&6【步驟二】重置模式: %status%"
+    step2-reset-lore:
+      - "&7自動重置狀態: %status%"
+      - "&7(獨立設定儲存於 YML)"
+      - "&7"
+      - "&e點擊可返回步驟二修改"
+    # %minutes%: 分鐘數
+    step2-time-name: "&6【步驟二】間隔時間: &a%minutes% &7分鐘"
+    step2-time-lore:
+      - "&7方塊被刷空後的自動重置冷卻時間"
+      - "&7目前設定: &a%minutes% &7分鐘"
+      - "&7"
+      - "&e點擊可返回步驟二修改"
+    step3-empty-name: "&c【步驟三】尚未設定任何掉落物"
+    step3-empty-lore:
+      - "&e點擊此處返回步驟三添加物品"
+    step3-air-name: "&c[無掉落]"
+    # %chance%: 機率
+    step3-air-lore:
+      - "&8------------------------"
+      - "&e機率: &a%chance%"
+      - "&7點擊可返回步驟三調整"
+    step3-item-lore:
+      - ""
+      - "&8------------------------"
+      - "&e機率: &a%chance%"
+      - "&7點擊可返回步驟三調整"
+    # %count%: 其餘未排入物品數, %total%: 總物品數
+    step3-more-name: "&b...以及其他 %count% 項物品"
+    step3-more-lore:
+      - "&7獎池共包含 &e%total% &7種掉落項目"
+      - "&e點擊此處返回步驟三查看完整清單"
+    confirm-button-name: "&a✔ 確認送出並儲存"
+    confirm-button-lore:
+      - "&7點擊後將正式儲存至 YML 檔案"
+      - "&e手持的方塊將寫入上述所有屬性！"
+      - "&a完成後即可放置在地上使用，或手持點擊進行再次編輯"
+
+  # 試煉寶庫專屬步驟精靈設定
+  vault:
+    step1:
+      title: "&8[步驟 1/5] 寶庫種類與識別名稱"
+      type-button-name: "&6寶庫種類"
+      type-normal-desc: "&6普通試煉寶庫"
+      type-ominous-desc: "&5不祥試煉寶庫"
+      type-button-lore:
+        - "&7目前設定: %type%"
+        - "&e點擊切換為: &f%other_type%"
+        - "&7"
+        - "&8(不祥寶庫具備紅色靈魂烈焰與骷髏粒子特效)"
+      name-button-name: "&e配置名稱"
+      name-button-lore:
+        - "&7目前名稱: %current_name%"
+        - "&7"
+        - "&e點擊此處 &f在聊天室輸入名稱"
+        - "&8(只能包含英文字母、數字與底線)"
+      next-ready-name: "&a下一步 ➜ &f(專屬鑰匙設定)"
+      next-ready-lore:
+        - "&7前往 [步驟 2/5] 設定專屬鑰匙與製作防偽鑰匙"
+        - "&a點擊前往下一步"
+    step2:
+      title: "&8[步驟 2/5] 專屬鑰匙製作與設定"
+    step3:
+      title: "&8[步驟 3/5] 冷卻機制與出貨數量"
+      back-name: "&e⬅ 上一步 &f(專屬鑰匙設定)"
+      back-lore:
+        - "&7返回 [步驟 2/5] 修改鑰匙外觀、名稱或重新製作"
+      next-name: "&a下一步 ➜ &f(掉落池設定)"
+      next-lore:
+        - "&7前往 [步驟 4/5] 設定掉落物與機率"
+        - "&a點擊前往下一步"
+      mode-button-name: "&6【冷卻與重置模式】"
+      mode-button-lore:
+        - "&7目前模式: %mode%"
+        - "&7"
+        - "&e點擊切換模式："
+        - "&7▪ &b個人獨立冷卻"
+        - "&7▪ &e全域冷卻"
+        - "&7▪ &c終生一次"
+      time-button-name: "&e冷卻間隔時間"
+      time-button-lore:
+        - "&7目前設定: &a%minutes% &7分鐘"
+        - "&7"
+        - "&e點擊此處 &f開啟時間調整畫面"
+      time-disabled-lore:
+        - "&7目前為【終生一次】模式"
+        - "&8無須設定冷卻時間"
+      rolls-button-name: "&6【每次出貨數量】: &a%rolls% &f件"
+      rolls-button-lore:
+        - "&7開鎖成功時彈出幾件物品 (預設 3 件)"
+        - "&7目前設定: &a%rolls% &7件"
+        - "&7"
+        - "&e點擊此處 &f開啟數量按鈕調整畫面"
+        - "&8(可設定範圍: 1 ~ 64 件)"
+    rolls-adjust:
+      title: "&8每次彈出數量設定"
+      current-name: "&6目前每次彈出: &a%rolls% &f件"
+      current-lore:
+        - "&7開鎖成功時，寶庫將連續彈出幾件物品"
+        - "&7目前設定: &a%rolls% &7件"
+        - "&7"
+        - "&e請點擊兩側按鈕直接增減數量"
+        - "&7(範圍限制: 1 ~ 64 件)"
+      btn-minus-10-name: "&c-10 件"
+      btn-minus-10-lore:
+        - "&7點擊減少 10 件"
+      btn-minus-5-name: "&c-5 件"
+      btn-minus-5-lore:
+        - "&7點擊減少 5 件"
+      btn-minus-1-name: "&c-1 件"
+      btn-minus-1-lore:
+        - "&7點擊減少 1 件"
+      btn-plus-1-name: "&a+1 件"
+      btn-plus-1-lore:
+        - "&7點擊增加 1 件"
+      btn-plus-5-name: "&a+5 件"
+      btn-plus-5-lore:
+        - "&7點擊增加 5 件"
+      btn-plus-10-name: "&a+10 件"
+      btn-plus-10-lore:
+        - "&7點擊增加 10 件"
+      chat-input-name: "&b聊天室直接輸入"
+      chat-input-lore:
+        - "&7點擊後在聊天室直接輸入整數 (1 ~ 64)"
+      confirm-button-name: "&a✔ 完成並返回"
+      confirm-button-lore:
+        - "&7返回 [步驟 3/5]"
+    key-setup:
+      title: "&8[步驟 2/5] 專屬鑰匙製作與設定"
+      info-name: "&e【防偽鑰匙製作流程】"
+      info-lore:
+        - "&71. 在第 14 格放上任意基底物品 (可選)"
+        - "&72. 點擊【設定名稱】或【設定說明】(可選)"
+        - "&73. 點擊【🔨 製作防偽鑰匙】完成製作並領取！"
+        - "&7"
+        - "&a✔ 系統將自動植入專屬防偽戳印"
+        - "&a✔ 玩家無法用普通重名物品冒充開啟"
+        - "&a✔ 亦可使用指令隨時發放防偽鑰匙"
+      name-btn-name: "&e設定鑰匙名稱"
+      name-btn-lore:
+        - "&7目前設定: &f%name%"
+        - "&7"
+        - "&e點擊此處 &f在聊天室自訂名稱"
+        - "&8(支援彩色代碼如 &6古代鑰匙)"
+      lore-btn-name: "&e設定鑰匙說明"
+      lore-btn-lore:
+        - "&7目前額外行數: &a%lines% &7行"
+        - "&7"
+        - "&e點擊此處 &f在聊天室新增一行說明"
+        - "&8(支援彩色代碼)"
+      craft-btn-name: "&a🔨 製作防偽鑰匙並領取"
+      craft-btn-lore:
+        - "&7將中間的物品製作為正式防偽鑰匙："
+        - "&a✔ 植入專屬防偽 PDC 標記"
+        - "&a✔ 綁定為此寶庫的唯一解鎖鑰匙"
+        - "&a✔ 製作完成後發送 1 把至背包"
+        - "&7"
+        - "&e點擊立即製作！"
+      default-name: "&b重置為原版試煉鑰匙"
+      default-lore:
+        - "&7還原為最單純的原版鑰匙"
+        - "&f%type%"
+      back-name: "&e⬅ 上一步 &f(種類與名稱)"
+      back-lore:
+        - "&7返回 [步驟 1/5] 修改寶庫類型或名稱"
+      next-name: "&a下一步 ➜ &f(冷卻與出貨設定)"
+      next-lore:
+        - "&7保存鑰匙設定並前往 [步驟 3/5]"
+        - "&a點擊前往下一步"
+      confirm-name: "&a下一步 ➜ &f(冷卻與出貨設定)"
+      confirm-lore:
+        - "&7保存鑰匙設定並前往 [步驟 3/5]"
+        - "&a點擊前往下一步"
+    step4:
+      title: "&8[步驟 4/5] 掉落池物品與機率"
+      back-to-step3-name: "&e⬅ 上一步 &f(冷卻與出貨設定)"
+      back-to-step3-lore:
+        - "&7返回 [步驟 3/5] 修改冷卻或出貨數量"
+      step1-type-name: "&e【步驟一】寶庫類型: &f%type%"
+      step1-type-lore:
+        - "&7目前選擇的寶庫類型: &f%type%"
+        - "&7"
+        - "&e點擊可返回步驟一修改"
+      step1-name-name: "&e【步驟一】配置名稱: &a%name%"
+      step1-name-lore:
+        - "&7配置檔案路徑: &f/data/vault/%name%.yml"
+        - "&7遊戲內標題已自動同步為: &f%display%"
+        - "&7"
+        - "&e點擊可返回步驟一修改"
+      step2-key-name: "&6【步驟二】解鎖鑰匙: &e%key%"
+      step2-key-lore:
+        - "&7材質: &f%material%"
+        - "&7具備 NBT / PDC 防偽比對"
+        - "&7"
+        - "&e點擊可返回步驟二修改"
+      step2-mode-name: "&6【步驟三】冷卻機制: &e%mode%"
+      step2-mode-lore:
+        - "&7冷卻模式: &e%mode%"
+        - "&7間隔時間: %time%"
+        - "&7"
+        - "&e點擊可返回步驟三修改"
+      step2-roll-name: "&6【步驟三】每次出貨: &a%rolls% &f件"
+      step2-roll-lore:
+        - "&7開鎖成功時彈出的物品數量: &a%rolls% &7件"
+        - "&7"
+        - "&e點擊可返回步驟三修改"
+      confirm-button-lore:
+        - "&7確認所有設定無誤後點擊送出"
+        - "&a✔ 檔案將儲存至 /data/vault/%name%.yml"
+        - "&a✔ 手持的物品將立即更新所有屬性與外觀"
+        - "&a✔ 已放置於世界的方塊將同步更新"
+        - "&a✔ 儲存後即可直接放置於世界上"
+    step5:
+      title: "&8[步驟 5/5] 設定確認與儲存"
+      step1-type-name: "&e【步驟一】寶庫類型: &f%type%"
+      step1-name-name: "&e【步驟一】配置名稱: &a%name%"
+      step2-key-name: "&6【步驟二】解鎖鑰匙: &e%key%"
+      step3-mode-name: "&6【步驟三】冷卻機制: &e%mode%"
+      step3-roll-name: "&6【步驟三】每次出貨: &a%rolls% &f件"
+      step4-empty-name: "&c【步驟四】尚未設定任何掉落物"
+      back-to-step4-name: "&e⬅ 上一步 (掉落池)"
+      back-to-step4-lore:
+        - "&7返回 [步驟 4/5] 調整物品與機率"
+
+  # 試煉生怪磚專屬步驟精靈設定
+  spawner:
+    step1:
+      title: "&8[步驟 1/6] 生怪磚種類與識別名稱"
+      type-button-name: "&6生怪磚種類"
+      type-normal-desc: "&6普通試煉生怪磚"
+      type-ominous-desc: "&5不祥試煉生怪磚"
+      type-button-lore:
+        - "&7目前設定: %type%"
+        - "&e點擊切換為: &f%other_type%"
+        - "&7"
+        - "&8(不祥生怪磚具備靈魂火焰特效與更具挑戰性的試煉音效)"
+      name-button-name: "&e配置名稱"
+      name-button-lore:
+        - "&7目前名稱: %current_name%"
+        - "&7"
+        - "&e點擊此處 &f在聊天室輸入名稱"
+        - "&8(只能包含英文字母、數字與底線)"
+      next-ready-name: "&a下一步 ➜ &f(選擇生成怪物)"
+      next-ready-lore:
+        - "&7前往 [步驟 2/6] 選擇試煉生成的怪物種類"
+        - "&a點擊前往下一步"
+    step2:
+      title: "&8[步驟 2/6] 選擇生成怪物種類"
+      pool-title: "&8[步驟 2/6] 怪物池與生成機率"
+      back-to-step1-name: "&e⬅ 上一步 &f(生怪磚種類與名稱)"
+      back-to-step1-lore:
+        - "&7返回 [步驟 1/6] 修改種類或名稱"
+      current-selected-name: "&6目前選中: &a%mob%"
+      current-selected-lore:
+        - "&7生怪磚籠內將以 3D 模型旋轉預覽此怪物"
+        - "&7代號: &f%type%"
+        - "&a點擊下方按鈕前往下一步進行波次設定"
+      next-ready-name: "&a下一步 ➜ &f(波次與數量設定)"
+      next-ready-lore:
+        - "&7前往 [步驟 3/6] 設定生怪數量、同時存活上限與間隔"
+        - "&a點擊前往下一步"
+    mob-chance:
+      title: "&8[%mob%&8] 機率設定"
+    step3:
+      title: "&8[步驟 3/6] 波次與數量設定"
+      back-name: "&e⬅ 上一步 &f(選擇生成怪物)"
+      back-lore:
+        - "&7返回 [步驟 2/6] 重新挑選怪物種類"
+      next-name: "&a下一步 ➜ &f(冷卻與獎勵設定)"
+      next-lore:
+        - "&7前往 [步驟 4/6] 設定冷卻重置模式與獲勝獎勵數量"
+        - "&a點擊前往下一步"
+      total-button-name: "&6【總怪數】: &a%total% &f隻"
+      total-button-lore:
+        - "&7試煉挑戰中必須擊敗的怪物總數量"
+        - "&7目前設定: &a%total% &7隻"
+        - "&7"
+        - "&e點擊此處 &f開啟數值調整畫面"
+        - "&8(可設定範圍: 1 ~ 64 隻)"
+      sim-button-name: "&6【同時存活上限】: &a%sim% &f隻"
+      sim-button-lore:
+        - "&7戰鬥場上同時存在的最大怪物數量"
+        - "&7防止怪物過多造成玩家負擔或伺服器卡頓"
+        - "&7目前設定: &a%sim% &7隻"
+        - "&7"
+        - "&e點擊此處 &f開啟數值調整畫面"
+        - "&8(可設定範圍: 1 ~ 16 隻)"
+      delay-button-name: "&6【生成間隔】: &a%delay% &f秒"
+      delay-button-lore:
+        - "&7每波怪物生成之間的等待間隔時間"
+        - "&7目前設定: &a%delay% &7秒"
+        - "&7"
+        - "&e點擊此處 &f開啟數值調整畫面"
+        - "&8(可設定範圍: 1 ~ 60 秒)"
+      range-button-name: "&6【感應範圍】: &a%range% &f格"
+      range-button-lore:
+        - "&7玩家進入此距離內將自動觸發試煉戰鬥"
+        - "&7目前設定: &a%range% &7格"
+        - "&7"
+        - "&e點擊此處 &f開啟數值調整畫面"
+        - "&8(可設定範圍: 4 ~ 48 格)"
+      actionbar-on-name: "&a✔ 對戰進度提示: 開啟"
+      actionbar-off-name: "&c✖ 對戰進度提示: 關閉"
+      actionbar-lore:
+        - "&7試煉戰鬥中向參戰玩家推播底部小字"
+        - "&7顯示即時討伐進度與場上怪物數 (Action Bar)"
+        - "&7"
+        - "&7此生怪磚設定: %status%"
+        - "&7"
+        - "&e點擊切換 開啟 / 關閉"
+    step4:
+      title: "&8[步驟 4/6] 冷卻模式與出貨數量"
+      back-name: "&e⬅ 上一步 &f(波次與數量設定)"
+      back-lore:
+        - "&7返回 [步驟 3/6] 修改怪物總數或生成間隔"
+      next-name: "&a下一步 ➜ &f(獲勝獎勵掉落池)"
+      next-lore:
+        - "&7前往 [步驟 5/6] 設定獲勝掉落池物品與機率"
+        - "&a點擊前往下一步"
+    step5:
+      title: "&8[步驟 5/6] 獲勝獎勵掉落物設定"
+      back-name: "&e⬅ 上一步 &f(冷卻與出貨設定)"
+      back-lore:
+        - "&7返回 [步驟 4/6] 修改冷卻或出貨數量"
+      next-ready-name: "&a下一步 ➜ &f(全景確認與儲存)"
+      next-ready-lore:
+        - "&7前往 [步驟 6/6] 查看完整摘要並確認送出"
+        - "&a點擊前往下一步"
+    step6:
+      title: "&8[步驟 6/6] 設定確認與儲存"
+      confirm-name: "&a✔ 確認儲存並取得生怪磚"
+      confirm-lore:
+        - "&7儲存所有設定至配置檔案"
+        - "&7手持物品將自動轉化為成品生怪磚方塊"
+        - "&a點擊立即儲存！"
+
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# 主控台後台日誌紀錄格式 (支援彩色代碼 & 與排版以區分不同插件內容)
+# ------------------------------------------------------------------------------
+logs:
+  # ================= 可疑方塊系列 (黃色/金色/大地色) =================
+  block-place: "&6[可疑方塊·放置]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 放置了方塊 &8[&7配置: &e%name%&7, 材質: &f%type%&7, 預抽: &a%rolled%&8]"
+  block-break: "&c[可疑方塊·破壞]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 挖碎了方塊 &8[&7配置: &e%name%&8] &7(方塊碎裂，無掉落)"
+  brush-loot: "&e[可疑方塊·刷寶]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 成功刷出戰利品: &a%item% &8[&7配置: &e%name%&7, 機率: &a%chance%&7, 彈出面: &f%face%&8]"
+  brush-air: "&8[可疑方塊·落空]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 刷出落空項目: &c%item% &8[&7配置: &e%name%&7, 機率: &c%chance%&8]"
+  reset-scheduled: "&b[可疑方塊·排程]&7 位於 &b(%world%, %x%, %y%, %z%)&7 的方塊 &8[&e%name%&8]&7 已刷空，已排程於 &f%minutes% 分鐘&7後自動重置"
+  reset-executed: "&a[可疑方塊·重置]&7 位於 &b(%world%, %x%, %y%, %z%)&7 的方塊已成功重置 &8[&7配置: &e%name%&7, 材質: &f%type%&7, 新抽: &a%rolled%&8]"
+  reset-cancelled: "&7[可疑方塊·取消]&7 位於 &b(%world%, %x%, %y%, %z%)&7 的方塊 &8[&e%name%&8]&7 重置排程已取消"
+  reset-skipped: "&e[可疑方塊·略過]&7 位於 &b(%world%, %x%, %y%, %z%)&7 的方塊材質已變更為 &f%type%&7 (非沙或礫石)，略過重置 &8[&e%name%&8]"
+  reset-not-found: "&c[可疑方塊·警告]&7 位於 &b(%world%, %x%, %y%, %z%)&7 找不到對應配置 &8[&c%name%&8]&7，無法重置"
+
+  # ================= 試煉寶庫系列 (橘金/銅橙色) =================
+  vault-placed: "&6[試煉寶庫·放置]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 放置了寶庫 &8[&7配置: &e%name%&7, 類型: &6%type%&8]"
+  vault-broken: "&c[試煉寶庫·破壞]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 拆除了寶庫 &8[&7配置: &e%name%&8]"
+  vault-unlock: "&a[試煉寶庫·解鎖]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 成功解鎖寶庫 &8[&e%name%&8]&7，彈出了 &a%count% 件&7戰利品"
+  vault-save: "&e[試煉寶庫·儲存]&7 玩家 &f%player%&7 成功儲存寶庫配置 &8[&e%name%&8] &8(&7類型: &6%type%&7, 模式: &f%mode%&7, 出貨數: &a%rolls%&8)"
+
+  # ================= 試煉生怪磚系列 (不祥紫羅蘭/粉紫色) =================
+  spawner-placed: "&5[試煉生怪磚·放置]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 放置了生怪磚 &8[&7配置: &e%name%&7, 怪物: &c%mob%&7, 類型: &d%type%&8]"
+  spawner-broken: "&c[試煉生怪磚·破壞]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 拆除了生怪磚 &8[&7配置: &e%name%&8]"
+
+  # ================= 管理指令審計系列 (科技青藍色) =================
+  cmd-create: "&b[管理指令·創建]&7 玩家 &f%player%&7 執行 &e/%label% create&7 創建了全新自訂可疑方塊草稿物品"
+  cmd-create-vault: "&b[管理指令·創建]&7 玩家 &f%player%&7 執行 &e/%label% create vault&7 創建了全新試煉寶庫草稿物品"
+  cmd-create-spawner: "&b[管理指令·創建]&7 玩家 &f%player%&7 執行 &e/%label% create spawner&7 創建了全新試煉生怪磚草稿物品"
+  cmd-give: "&b[管理指令·發放]&7 &f%sender%&7 執行 &e/%label% give&7 給予玩家 &e%target%&7 自訂方塊 &8[&7配置: &e%name%&7, 數量: &f%amount%&8]"
+  cmd-key: "&b[管理指令·鑰匙]&7 &f%sender%&7 執行 &e/%label% key&7 發放寶庫專屬鑰匙給 &e%target% &8[&7寶庫: &e%name%&7, 數量: &f%amount%&8]"
+  cmd-edit: "&b[管理指令·編輯]&7 玩家 &f%player%&7 執行 &e/%label% edit&7 開啟了可疑方塊配置 &8[&e%name%&8]&7 的步驟引導介面"
+  cmd-edit-vault: "&b[管理指令·編輯]&7 玩家 &f%player%&7 執行 &e/%label% edit vault&7 開啟了寶庫配置 &8[&e%name%&8]&7 的引導介面"
+  cmd-edit-spawner: "&b[管理指令·編輯]&7 玩家 &f%player%&7 執行 &e/%label% edit spawner&7 開啟了生怪磚配置 &8[&e%name%&8]&7 的引導介面"
+  cmd-delete: "&c[管理指令·刪除]&7 &f%sender%&7 執行 &e/%label% delete&7 成功刪除了配置 &8[&c%name%&8]"
+  cmd-delete-vault: "&c[管理指令·刪除]&7 &f%sender%&7 執行 &e/%label% delete vault&7 刪除了寶庫配置 &8[&c%name%&8]"
+  cmd-delete-spawner: "&c[管理指令·刪除]&7 &f%sender%&7 執行 &e/%label% delete spawner&7 刪除了生怪磚配置 &8[&c%name%&8]"
+  cmd-reload: "&a[管理指令·重載]&7 &f%sender%&7 執行 &e/%label% reload&7 重新載入了設定檔與所有自訂方塊配置"
+
+  # ================= 步驟編輯精靈 (引導鮮綠色) =================
+  gui-open: "&a[介面引導]&7 玩家 &f%player%&7 開啟了步驟精靈介面 &8(&7模式: &f%mode%&7, 配置: &e%name%&8)"
+  gui-save: "&a[配置儲存]&7 玩家 &f%player%&7 透過步驟精靈成功儲存配置 &8[&e%name%&8] &8(&7材質: &f%type%&7, 重置: &f%reset%&7, 物品數: &a%count%&7, 機率: &a%chance%&8)"

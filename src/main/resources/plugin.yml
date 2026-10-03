@@ -1,0 +1,19 @@
+name: CustomLootX
+version: '${version}'
+main: clre20.customLootX.CustomLootX
+api-version: '1.21'
+load: POSTWORLD
+authors: [Clre20]
+description: 自訂可疑沙與可疑礫石掉落物與機率設定插件
+softdepend: [MythicMobs]
+
+commands:
+  clx:
+    description: CustomLootX 主指令
+    aliases: [customlootx]
+    usage: /<command> [help|create|give|edit|list|delete|reload]
+
+permissions:
+  customlootx.admin:
+    description: 允許使用 CustomLootX 所有管理與編輯指令 (或 OP 等級 2 以上)
+    default: false
