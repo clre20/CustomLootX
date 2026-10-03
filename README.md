@@ -1,11 +1,11 @@
 # CustomLootX
 
-![Version](https://img.shields.io/badge/Minecraft-1.21.x-brightgreen.svg)
+![Version](https://img.shields.io/badge/Minecraft-1.21.x%20%7C%2026.x-brightgreen.svg)
 ![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
 
-**CustomLootX** 是一套專為 **Minecraft 1.21.x+** 伺服器設計的次世代進階戰利品與試煉機制管理插件。
+**CustomLootX** 是一套專為 **Minecraft 1.21.x ~ 26.x (支援 26.1 / 26.2 / 26.3)** 伺服器設計的次世代進階戰利品與試煉機制管理插件。
 
-整合了 1.21 核心特色的 **自訂可疑方塊（可疑沙/可疑礫石）**、**自訂試煉寶庫** 以及 **自訂試煉生怪磚**，提供全程可視化的 **設定精靈 GUI**，無需繁瑣編輯 YML，即可輕鬆打造副本、解謎、探索與戰鬥獎勵機制！
+整合了 1.21 & 26.x 核心特色的 **自訂可疑方塊（可疑沙/可疑礫石）**、**自訂試煉寶庫** 以及 **自訂試煉生怪磚**，提供全程可視化的 **設定精靈 GUI**，無需繁瑣編輯 YML，即可輕鬆打造副本、解謎、探索與戰鬥獎勵機制！
 
 ---
 ### 1.自訂可疑方塊
