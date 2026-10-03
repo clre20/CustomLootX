@@ -66,3 +66,74 @@
 * **Java 版本**：Java 21+。
 * **可選依賴**：
   * [MythicMobs](https://mythiccraft.io/)：支援生怪磚召喚 MM 自訂生物與自動抓取基底模型。
+
+---
+
+# CustomLootX
+
+![Version](https://img.shields.io/badge/Minecraft-1.21.x-brightgreen.svg)
+![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
+
+**CustomLootX** is a next-generation advanced loot and trial mechanics management plugin built specifically for **Minecraft 1.21.x+** servers.
+
+It seamlessly integrates the core mechanics of 1.21: **Custom Suspicious Blocks (Suspicious Sand / Suspicious Gravel)**, **Custom Trial Vaults**, and **Custom Trial Spawners**. Featuring an intuitive **Setup Wizard GUI**, you can easily design dungeons, puzzles, exploration rewards, and combat encounters without touching tedious YAML configuration files!
+
+---
+### 1. Custom Suspicious Blocks
+- **Block Type Support**: Fully supports 1.20+ features, including **Suspicious Sand** and **Suspicious Gravel**.
+- **Dynamic Brushing & Auto-Reset**: Configure independent respawn/reset timers (minutes/seconds) for each block. Once brushed and claimed, blocks automatically reset after the countdown, allowing players to brush them repeatedly.
+- **Visual Loot Table & Drop Rates**: Drag and drop rewards directly into an intuitive 54-slot chest GUI. Supports click adjustments and precise decimal chat input (down to `0.01%`), custom "Empty Drop" chances, and one-click auto-fill or balance features.
+
+### 2. Custom Trial Vaults
+- **Customizable Keys**: Use any item as an unlocking key (including vanilla Trial Keys, Ominous Trial Keys, or custom RPG keys). Supports matching item material, custom display names, full lore lines, and CustomModelData / NBT tags.
+- **Flexible Cooldown Modes**:
+  * **Individual Player Cooldown**: Tracks unlock cooldowns per player—ideal for multiplayer dungeons where everyone claims their own loot.
+  * **Global Server Cooldown**: Triggers a server-wide cooldown once unlocked—ideal for open-world boss chests and competitive objectives.
+- **Dynamic Previews & Ejection Effects**:
+  * Supports configuring multiple loot roll counts per unlock.
+  * Preserves the classic Trial Vault visual effects: spinning item previews inside the vault and item ejection animations upon unlocking.
+
+### 3. Custom Trial Spawners
+- **Multi-Wave Combat System**: Freely configure challenge waves, total mobs spawned per wave, maximum simultaneous active mobs, and player trigger radius.
+- **Deep MythicMobs Integration**:
+  * Supports vanilla Minecraft mobs.
+  * Supports MythicMobs custom entities.
+- **Internal Spawner Display Models**:
+  * Supports vanilla mob models.
+  * Automatically matches and displays the base entity model for MythicMobs.
+  * Supports cycle display mode.
+- **Victory Rewards & Custom Sounds**:
+  * Configurable completion loot tables.
+  * Built-in victory sound system supporting custom sound selection, pitch, and volume adjustments, complete with real-time in-GUI previews!
+
+### 4. Visual Setup Wizard
+- **Zero-Friction Workflow**: Right-click the air while holding a template item to enter a dedicated step-by-step setup wizard.
+- **Real-Time Preview & Summary**: Displays a comprehensive overview of all configured parameters before saving—commit changes with a single click.
+- **Global Dynamic Synchronization**:
+  * Once saved, templates held in hand or sitting in player inventories update their lore details instantly.
+  * Placed blocks and spawners in the world utilize a dynamic configuration lookup architecture—**updates take effect instantly without needing to break and replace them!**
+- **Safety Protection**: Prevents accidental placement of unconfigured blank template blocks.
+
+---
+## Commands & Permissions
+
+The primary command prefix is `/clx` (alias: `/customlootx`). All administrative and editing commands require the `customlootx.admin` permission (defaults to OP Level 2+):
+
+| Command | Description |
+| :--- | :--- |
+| `/clx create <suspicious\|vault\|spawner> [name]` | Create a new custom template item (Right-click air while holding to open wizard) |
+| `/clx give <suspicious\|vault\|spawner> <name> [player] [amount]` | Give configured template blocks to yourself or a specified player |
+| `/clx edit <suspicious\|vault\|spawner> <name>` | Open the step-by-step setup wizard GUI for an existing configuration |
+| `/clx list <suspicious\|vault\|spawner>` | List all saved configurations and their status under a category |
+| `/clx delete <suspicious\|vault\|spawner> <name>` | Delete a specified configuration profile |
+| `/clx reload` | Reload all configuration files, template data, and active runtimers |
+| `/clx help` | Display the full list of commands and syntax guide |
+
+---
+
+## Environment & Dependencies
+
+- **Supported Platforms**: Paper / Purpur 1.21.x or higher.
+- **Java Version**: Java 21+.
+- **Optional Dependencies**:
+  * [MythicMobs](https://mythiccraft.io/): Required for spawning custom MM entities and resolving base display models.
