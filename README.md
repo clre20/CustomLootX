@@ -67,6 +67,8 @@
 * **可選依賴**：
   * [MythicMobs](https://mythiccraft.io/)：支援生怪磚召喚 MM 自訂生物與自動抓取基底模型。
 
+---
+
 # CustomLootX
 
 ![Version](https://img.shields.io/badge/Minecraft-1.21.x-brightgreen.svg)
