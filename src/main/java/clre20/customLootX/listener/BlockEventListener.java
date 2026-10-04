@@ -52,6 +52,14 @@ public class BlockEventListener implements Listener {
 
         Player player = event.getPlayer();
 
+        // 檢查是否為未儲存草稿
+        if (plugin.getItemManager().isDraftItem(item)) {
+            event.setCancelled(true);
+            plugin.getConfigManager().send(player, "cannot-place-draft");
+            plugin.getConfigManager().playSound(player, "error");
+            return;
+        }
+
         // Check if blank
         if (plugin.getItemManager().isBlankCustomItem(item)) {
             event.setCancelled(true);

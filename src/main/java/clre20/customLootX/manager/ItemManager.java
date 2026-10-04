@@ -41,6 +41,13 @@ public class ItemManager {
     public final NamespacedKey KEY_SPAWNER_MOB;
     public final NamespacedKey KEY_SPAWNER_LOC;
 
+    public final NamespacedKey KEY_IS_DRAFT;
+    public final NamespacedKey KEY_DRAFT_ID;
+    public final NamespacedKey KEY_DRAFT_TYPE;
+    public final NamespacedKey KEY_DRAFT_EXPIRE;
+    public final NamespacedKey KEY_DRAFT_ORIGINAL_NAME;
+    public final NamespacedKey KEY_DRAFT_IS_EXPIRED;
+
     public ItemManager(CustomLootX plugin) {
         this.plugin = plugin;
         this.KEY_CUSTOM_LOOT = new NamespacedKey(plugin, "is_custom_loot");
@@ -60,6 +67,13 @@ public class ItemManager {
         this.KEY_IS_BLANK_SPAWNER = new NamespacedKey(plugin, "is_blank_spawner");
         this.KEY_SPAWNER_MOB = new NamespacedKey(plugin, "spawner_mob");
         this.KEY_SPAWNER_LOC = new NamespacedKey(plugin, "spawner_loc");
+
+        this.KEY_IS_DRAFT = new NamespacedKey(plugin, "is_draft");
+        this.KEY_DRAFT_ID = new NamespacedKey(plugin, "draft_id");
+        this.KEY_DRAFT_TYPE = new NamespacedKey(plugin, "draft_type");
+        this.KEY_DRAFT_EXPIRE = new NamespacedKey(plugin, "draft_expire");
+        this.KEY_DRAFT_ORIGINAL_NAME = new NamespacedKey(plugin, "draft_orig_name");
+        this.KEY_DRAFT_IS_EXPIRED = new NamespacedKey(plugin, "draft_is_expired");
     }
 
     /**
@@ -727,5 +741,134 @@ public class ItemManager {
                 p.setItemOnCursor(createTemplateSpawnerItem(template, cursor.getAmount()));
             }
         }
+    }
+
+    // ==========================================
+    // Draft (草稿暫存) 管理方法
+    // ==========================================
+
+    public boolean isDraftItem(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return false;
+        return item.getItemMeta().getPersistentDataContainer().has(KEY_IS_DRAFT, PersistentDataType.BYTE);
+    }
+
+    public String getDraftId(ItemStack item) {
+        if (!isDraftItem(item)) return null;
+        return item.getItemMeta().getPersistentDataContainer().get(KEY_DRAFT_ID, PersistentDataType.STRING);
+    }
+
+    public clre20.customLootX.model.DraftType getDraftType(ItemStack item) {
+        if (!isDraftItem(item)) return null;
+        String typeStr = item.getItemMeta().getPersistentDataContainer().get(KEY_DRAFT_TYPE, PersistentDataType.STRING);
+        return clre20.customLootX.model.DraftType.fromString(typeStr);
+    }
+
+    public long getDraftExpireTime(ItemStack item) {
+        if (!isDraftItem(item)) return 0;
+        Long expire = item.getItemMeta().getPersistentDataContainer().get(KEY_DRAFT_EXPIRE, PersistentDataType.LONG);
+        return expire != null ? expire : 0;
+    }
+
+    public String getDraftOriginalName(ItemStack item) {
+        if (!isDraftItem(item)) return null;
+        return item.getItemMeta().getPersistentDataContainer().get(KEY_DRAFT_ORIGINAL_NAME, PersistentDataType.STRING);
+    }
+
+    public boolean isDraftExpired(ItemStack item) {
+        if (!isDraftItem(item)) return false;
+        long expire = getDraftExpireTime(item);
+        return expire > 0 && System.currentTimeMillis() > expire;
+    }
+
+    public boolean isDraftMarkedExpired(ItemStack item) {
+        if (!isDraftItem(item)) return false;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return false;
+        return meta.getPersistentDataContainer().has(KEY_DRAFT_IS_EXPIRED, PersistentDataType.BYTE);
+    }
+
+    /**
+     * 套用草稿狀態至物品 (更新 PDC 與未儲存 Lore)
+     */
+    public void applyDraft(ItemStack item, clre20.customLootX.model.DraftType type, String draftId, String originalName, long expireTime, String draftDisplayName) {
+        if (item == null) return;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return;
+
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        pdc.set(KEY_IS_DRAFT, PersistentDataType.BYTE, (byte) 1);
+        pdc.set(KEY_DRAFT_ID, PersistentDataType.STRING, draftId);
+        pdc.set(KEY_DRAFT_TYPE, PersistentDataType.STRING, type.name());
+        pdc.set(KEY_DRAFT_EXPIRE, PersistentDataType.LONG, expireTime);
+        pdc.remove(KEY_DRAFT_IS_EXPIRED);
+        if (originalName != null && !originalName.trim().isEmpty()) {
+            pdc.set(KEY_DRAFT_ORIGINAL_NAME, PersistentDataType.STRING, originalName);
+        } else {
+            pdc.remove(KEY_DRAFT_ORIGINAL_NAME);
+        }
+
+        String displayName = (draftDisplayName != null && !draftDisplayName.trim().isEmpty()) ? draftDisplayName : "未命名方塊";
+        meta.displayName(TextUtil.parse("&e[未儲存草稿] &f" + displayName));
+
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm");
+        String expireDateStr = sdf.format(new java.util.Date(expireTime));
+        int expireDays = plugin.getDraftManager().getExpireDays();
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(TextUtil.parse("&8================================"));
+        lore.add(TextUtil.parse("&c⚠ 此方塊有尚未儲存的編輯進度！"));
+        lore.add(TextUtil.parse("&7草稿編號: &f#" + draftId));
+        lore.add(TextUtil.parse("&7有效期限至: &e" + expireDateStr + " &8(" + expireDays + "天內有效)"));
+        lore.add(TextUtil.parse("&8================================"));
+        lore.add(TextUtil.parse("&e手持點擊空氣右鍵 &a可繼續上次編輯並儲存。"));
+        lore.add(TextUtil.parse("&c提示：草稿狀態下禁止放置於地面。"));
+        lore.add(TextUtil.parse("&8================================"));
+
+        meta.lore(lore);
+        item.setItemMeta(meta);
+    }
+
+    /**
+     * 當草稿逾期時，更新物品 Lore 為過期狀態
+     */
+    public void markDraftExpired(ItemStack item) {
+        if (item == null) return;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return;
+
+        meta.getPersistentDataContainer().set(KEY_DRAFT_IS_EXPIRED, PersistentDataType.BYTE, (byte) 1);
+
+        String draftId = getDraftId(item);
+        if (draftId == null) draftId = "未知";
+
+        meta.displayName(TextUtil.parse("&c[草稿已過期] &7自訂方塊"));
+
+        List<Component> lore = new ArrayList<>();
+        lore.add(TextUtil.parse("&8================================"));
+        lore.add(TextUtil.parse("&c⚠ 此草稿已超過有效期限（已過期）！"));
+        lore.add(TextUtil.parse("&7草稿編號: &8#" + draftId));
+        lore.add(TextUtil.parse("&8================================"));
+        lore.add(TextUtil.parse("&e手持點擊空氣右鍵即可編輯此方塊正式版。"));
+        lore.add(TextUtil.parse("&c提示：草稿已失效，無法放置於地面。"));
+        lore.add(TextUtil.parse("&8================================"));
+
+        meta.lore(lore);
+        item.setItemMeta(meta);
+    }
+
+    /**
+     * 移除物品上的草稿標籤
+     */
+    public void removeDraft(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return;
+        ItemMeta meta = item.getItemMeta();
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        pdc.remove(KEY_IS_DRAFT);
+        pdc.remove(KEY_DRAFT_ID);
+        pdc.remove(KEY_DRAFT_TYPE);
+        pdc.remove(KEY_DRAFT_EXPIRE);
+        pdc.remove(KEY_DRAFT_ORIGINAL_NAME);
+        pdc.remove(KEY_DRAFT_IS_EXPIRED);
+        item.setItemMeta(meta);
     }
 }

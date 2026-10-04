@@ -124,13 +124,18 @@ public class SpawnerMythicMobSelectGui extends CustomGuiHolder {
             }
         } else if (slot == 45) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep2MobGui(context, 1).open();
+            context.setTransitioning(false);
         } else if (slot == 48 && page > 1) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerMythicMobSelectGui(context, page - 1).open();
+            context.setTransitioning(false);
         } else if (slot == 49) {
             // 聊天室直接輸入 ID
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             context.getPlugin().getChatInputManager().requestInput(
                     player,
                     "&e請在聊天室輸入 MythicMob 的內部識別代號 (ID)，輸入 &ccancel &e取消：",
@@ -140,19 +145,24 @@ public class SpawnerMythicMobSelectGui extends CustomGuiHolder {
                             context.getPlugin().getConfigManager().send(player, "input-invalid");
                             context.getPlugin().getConfigManager().playSound(player, "error");
                             new SpawnerWizardStep2MobGui(context, 1).open();
+                            context.setTransitioning(false);
                             return;
                         }
                         addMobToPool(id, player);
+                        context.setTransitioning(false);
                     },
                     () -> {
                         new SpawnerWizardStep2MobGui(context, 1).open();
+                        context.setTransitioning(false);
                     }
             );
         } else if (slot == 50) {
             int totalPages = Math.max(1, (int) Math.ceil((double) mobIds.size() / ITEMS_PER_PAGE));
             if (page < totalPages) {
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerMythicMobSelectGui(context, page + 1).open();
+                context.setTransitioning(false);
             }
         }
     }
@@ -164,6 +174,15 @@ public class SpawnerMythicMobSelectGui extends CustomGuiHolder {
 
         context.getTemplate().getMobPool().add(new SpawnerMobEntry(id, defaultChance));
         context.getPlugin().getConfigManager().playSound(player, "success");
+        context.setTransitioning(true);
         new SpawnerWizardStep2MobGui(context, 1).open();
+        context.setTransitioning(false);
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
+        }
     }
 }

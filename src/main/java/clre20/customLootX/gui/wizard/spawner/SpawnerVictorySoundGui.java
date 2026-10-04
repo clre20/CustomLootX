@@ -243,12 +243,14 @@ public class SpawnerVictorySoundGui extends CustomGuiHolder {
         } else if (slot == 4) {
             // 聊天欄手動輸入
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             context.getPlugin().getChatInputManager().requestInput(
                     player,
                     "&e請在聊天室輸入自訂音效名稱 (例如 UI_TOAST_CHALLENGE_COMPLETE, ENTITY_PLAYER_LEVELUP)，輸入 &ccancel &e取消：",
                     input -> {
                         if (input == null || input.trim().isEmpty() || input.equalsIgnoreCase("cancel")) {
                             open();
+                            context.setTransitioning(false);
                             return;
                         }
                         String soundName = input.trim();
@@ -263,8 +265,12 @@ public class SpawnerVictorySoundGui extends CustomGuiHolder {
                             player.sendMessage(TextUtil.parse("&a[CustomLootX] 已將試煉完成提示音效設定為: &e" + soundName + " &7(自訂名稱)"));
                         }
                         open();
+                        context.setTransitioning(false);
                     },
-                    this::open
+                    () -> {
+                        open();
+                        context.setTransitioning(false);
+                    }
             );
         } else if (slot == 6) {
             // 單擊循環調整音量 (+0.2)
@@ -305,7 +311,16 @@ public class SpawnerVictorySoundGui extends CustomGuiHolder {
         } else if (slot == 45 || slot == 53) {
             // 返回步驟三
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep3WavesGui(context).open();
+            context.setTransitioning(false);
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

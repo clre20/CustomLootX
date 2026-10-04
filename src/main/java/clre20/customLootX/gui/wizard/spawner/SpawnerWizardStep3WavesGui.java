@@ -189,29 +189,50 @@ public class SpawnerWizardStep3WavesGui extends CustomGuiHolder {
 
         if (slot == 10) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerCountAdjustGui(context, SpawnerCountAdjustGui.TargetSetting.TOTAL_MOBS).open();
+            context.setTransitioning(false);
         } else if (slot == 12) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerCountAdjustGui(context, SpawnerCountAdjustGui.TargetSetting.SIMULTANEOUS_MOBS).open();
+            context.setTransitioning(false);
         } else if (slot == 14) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerCountAdjustGui(context, SpawnerCountAdjustGui.TargetSetting.SPAWN_DELAY).open();
+            context.setTransitioning(false);
         } else if (slot == 16) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerCountAdjustGui(context, SpawnerCountAdjustGui.TargetSetting.PLAYER_RANGE).open();
+            context.setTransitioning(false);
         } else if (slot == 18) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep2MobGui(context, 1).open();
+            context.setTransitioning(false);
         } else if (slot == 22) {
             context.getTemplate().setShowActionBar(!context.getTemplate().isShowActionBar());
             context.getPlugin().getConfigManager().playSound(player, "click");
             render();
         } else if (slot == 24) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerVictorySoundGui(context).open();
+            context.setTransitioning(false);
         } else if (slot == 26) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep4CooldownGui(context).open();
+            context.setTransitioning(false);
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

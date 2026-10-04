@@ -140,11 +140,14 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
             case 18 -> {
                 // 返回怪物池
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerWizardStep2MobGui(context, 1).open();
+                context.setTransitioning(false);
             }
             case 21 -> {
                 // 聊天室輸入
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 context.getPlugin().getChatInputManager().requestInput(
                         player,
                         context.getPlugin().getConfigManager().getRawMessage("input-prompt"),
@@ -164,10 +167,12 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
                             }
                             render();
                             open();
+                            context.setTransitioning(false);
                         },
                         () -> {
                             render();
                             open();
+                            context.setTransitioning(false);
                         }
                 );
             }
@@ -190,11 +195,20 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
                 if (context.getTemplate().getMobPool().size() > 1) {
                     context.getTemplate().getMobPool().remove(targetMob);
                     context.getPlugin().getConfigManager().playSound(player, "success");
+                    context.setTransitioning(true);
                     new SpawnerWizardStep2MobGui(context, 1).open();
+                    context.setTransitioning(false);
                 } else {
                     context.getPlugin().getConfigManager().playSound(player, "error");
                 }
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 

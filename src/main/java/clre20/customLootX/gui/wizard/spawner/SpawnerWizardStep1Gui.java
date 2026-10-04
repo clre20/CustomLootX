@@ -145,6 +145,7 @@ public class SpawnerWizardStep1Gui extends CustomGuiHolder {
         } else if (slot == 14) {
             // 點擊設定名稱
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             context.getPlugin().getChatInputManager().requestInput(
                     player,
                     context.getPlugin().getConfigManager().getRawMessage("name-prompt"),
@@ -168,10 +169,12 @@ public class SpawnerWizardStep1Gui extends CustomGuiHolder {
                         }
                         render();
                         open();
+                        context.setTransitioning(false);
                     },
                     () -> {
                         render();
                         open();
+                        context.setTransitioning(false);
                     }
             );
         } else if (slot == 18) {
@@ -187,7 +190,16 @@ public class SpawnerWizardStep1Gui extends CustomGuiHolder {
                 return;
             }
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep2MobGui(context, 1).open();
+            context.setTransitioning(false);
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

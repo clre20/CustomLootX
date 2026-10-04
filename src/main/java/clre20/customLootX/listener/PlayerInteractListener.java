@@ -84,6 +84,14 @@ public class PlayerInteractListener implements Listener {
                     return;
                 }
 
+                // If draft -> cannot place on ground, warn player
+                if (plugin.getItemManager().isDraftItem(held)) {
+                    event.setCancelled(true);
+                    plugin.getConfigManager().send(player, "cannot-place-draft");
+                    plugin.getConfigManager().playSound(player, "error");
+                    return;
+                }
+
                 // If blank -> cannot place on ground, warn player
                 if (plugin.getItemManager().isBlankCustomItem(held)) {
                     event.setCancelled(true);
@@ -125,6 +133,60 @@ public class PlayerInteractListener implements Listener {
     }
 
     private void openWizardForHeldItem(Player player, ItemStack held) {
+        // 檢查手持物品是否為草稿
+        if (plugin.getItemManager().isDraftItem(held)) {
+            if (plugin.getItemManager().isDraftExpired(held)) {
+                plugin.getItemManager().markDraftExpired(held);
+                plugin.getConfigManager().send(player, "draft-expired-reverted");
+                plugin.getConfigManager().playSound(player, "error");
+                plugin.getItemManager().removeDraft(held);
+
+                String origName = plugin.getItemManager().getDraftOriginalName(held);
+                if (origName != null && plugin.getTemplateManager().hasTemplate(origName)) {
+                    LootTemplate orig = plugin.getTemplateManager().getTemplate(origName);
+                    plugin.getItemManager().updateHoldingItem(player, orig);
+                    WizardContext context = new WizardContext(plugin, player, orig.cloneTemplate(), false);
+                    context.openStep1();
+                } else {
+                    ItemStack blank = plugin.getItemManager().createBlankItem(held.getType());
+                    player.getInventory().setItemInMainHand(blank);
+                    WizardContext context = new WizardContext(plugin, player, new LootTemplate("", held.getType()), true);
+                    context.openStep1();
+                }
+                return;
+            }
+
+            String draftId = plugin.getItemManager().getDraftId(held);
+            clre20.customLootX.model.DraftSession session = plugin.getDraftManager().loadDraft(clre20.customLootX.model.DraftType.SUSPICIOUS, draftId);
+            if (session == null || !(session.getTemplateData() instanceof LootTemplate lt)) {
+                plugin.getItemManager().markDraftExpired(held);
+                plugin.getConfigManager().send(player, "draft-expired-reverted");
+                plugin.getConfigManager().playSound(player, "error");
+                plugin.getItemManager().removeDraft(held);
+
+                String origName = plugin.getItemManager().getDraftOriginalName(held);
+                if (origName != null && plugin.getTemplateManager().hasTemplate(origName)) {
+                    LootTemplate orig = plugin.getTemplateManager().getTemplate(origName);
+                    plugin.getItemManager().updateHoldingItem(player, orig);
+                    WizardContext context = new WizardContext(plugin, player, orig.cloneTemplate(), false);
+                    context.openStep1();
+                } else {
+                    ItemStack blank = plugin.getItemManager().createBlankItem(held.getType());
+                    player.getInventory().setItemInMainHand(blank);
+                    WizardContext context = new WizardContext(plugin, player, new LootTemplate("", held.getType()), true);
+                    context.openStep1();
+                }
+                return;
+            }
+
+            boolean isNew = session.getOriginalName() == null;
+            WizardContext context = new WizardContext(plugin, player, lt, isNew, held, draftId, true);
+            plugin.getConfigManager().playSound(player, "click");
+            plugin.getConfigManager().send(player, "draft-loaded");
+            context.openStep1();
+            return;
+        }
+
         String templateName = plugin.getItemManager().getTemplateName(held);
         LootTemplate template = null;
         boolean isNew = true;

@@ -127,37 +127,55 @@ public class VaultKeyLoreGui extends CustomGuiHolder {
         Player player = (Player) event.getWhoClicked();
         int slot = event.getRawSlot();
 
+        VaultWizardContext context = setupGui.getContext();
         if (slot >= 9 && slot <= 26) {
             int index = slot - 9;
             if (index < loreList.size()) {
                 // 點擊已有行：開啟獨立的修改/刪除操作介面
-                setupGui.getContext().getPlugin().getConfigManager().playSound(player, "click");
+                context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new VaultKeyLoreLineActionGui(this, index).open();
+                context.setTransitioning(false);
             } else if (index == loreList.size() && loreList.size() < 17) {
                 // 點擊新增行按鈕
-                setupGui.getContext().getPlugin().getConfigManager().playSound(player, "click");
-                String prompt = setupGui.getContext().getPlugin().getConfigManager().getRawMessage("key-lore-prompt");
-                setupGui.getContext().getPlugin().getChatInputManager().requestInput(
+                context.getPlugin().getConfigManager().playSound(player, "click");
+                String prompt = context.getPlugin().getConfigManager().getRawMessage("key-lore-prompt");
+                context.setTransitioning(true);
+                context.getPlugin().getChatInputManager().requestInput(
                         player,
                         prompt,
                         input -> {
                             String line = TextUtil.ensureDefaultWhite(input.trim());
                             loreList.add(line);
-                            setupGui.getContext().getPlugin().getConfigManager().playSound(player, "success");
+                            context.getPlugin().getConfigManager().playSound(player, "success");
                             open();
+                            context.setTransitioning(false);
                         },
-                        this::open
+                        () -> {
+                            open();
+                            context.setTransitioning(false);
+                        }
                 );
             }
         } else if (slot == 31 && !loreList.isEmpty()) {
             // 清空所有說明
             loreList.clear();
-            setupGui.getContext().getPlugin().getConfigManager().playSound(player, "click");
+            context.getPlugin().getConfigManager().playSound(player, "click");
             render();
         } else if (slot == 27 || slot == 35) {
             // 返回鑰匙設定
-            setupGui.getContext().getPlugin().getConfigManager().playSound(player, "click");
+            context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             setupGui.open();
+            context.setTransitioning(false);
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        VaultWizardContext context = setupGui.getContext();
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

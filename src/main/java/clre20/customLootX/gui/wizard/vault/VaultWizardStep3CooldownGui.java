@@ -162,20 +162,35 @@ public class VaultWizardStep3CooldownGui extends CustomGuiHolder {
             // 調整冷卻時間
             if (context.getTemplate().getCooldownMode() != VaultCooldownMode.ONCE_PER_PLAYER) {
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new VaultTimeAdjustGui(context).open();
+                context.setTransitioning(false);
             }
         } else if (slot == 15) {
             // 開啟每次彈出數量調整視窗
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultRollAdjustGui(context).open();
+            context.setTransitioning(false);
         } else if (slot == 18) {
             // 返回步驟二 (專屬鑰匙設定)
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultKeySetupGui(context).open();
+            context.setTransitioning(false);
         } else if (slot == 26) {
             // 前往步驟四 (掉落池)
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultWizardStep4LootGui(context, 1).open();
+            context.setTransitioning(false);
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

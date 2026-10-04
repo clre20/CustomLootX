@@ -290,7 +290,9 @@ public class VaultWizardStep4LootGui extends CustomGuiHolder {
 
             // 左鍵進入機率調整畫面
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultItemChanceGui(context, items.get(itemIndex)).open();
+            context.setTransitioning(false);
             return;
         }
 
@@ -299,7 +301,9 @@ public class VaultWizardStep4LootGui extends CustomGuiHolder {
             case 45 -> {
                 // 返回步驟三 (冷卻與出貨設定)
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new VaultWizardStep3CooldownGui(context).open();
+                context.setTransitioning(false);
             }
             case 46 -> {
                 // ➕ 添加落空
@@ -352,8 +356,17 @@ public class VaultWizardStep4LootGui extends CustomGuiHolder {
                     return;
                 }
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new VaultWizardStep5ConfirmGui(context).open();
+                context.setTransitioning(false);
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 

@@ -108,37 +108,55 @@ public class VaultKeyLoreLineActionGui extends CustomGuiHolder {
         Player player = (Player) event.getWhoClicked();
         int slot = event.getRawSlot();
 
+        VaultWizardContext context = parentGui.getSetupGui().getContext();
         List<String> loreList = parentGui.getSetupGui().getCustomKeyLore();
 
         if (slot == 11) {
             // ✏ 修改此行內容
-            parentGui.getSetupGui().getContext().getPlugin().getConfigManager().playSound(player, "click");
+            context.getPlugin().getConfigManager().playSound(player, "click");
             int lineNum = lineIndex + 1;
             String prompt = "&e請在聊天室輸入【第 " + lineNum + " 行】的新內容 (支援彩色代碼 &)，輸入 &ccancel &e取消：";
-            parentGui.getSetupGui().getContext().getPlugin().getChatInputManager().requestInput(
+            context.setTransitioning(true);
+            context.getPlugin().getChatInputManager().requestInput(
                     player,
                     prompt,
                     input -> {
                         if (lineIndex >= 0 && lineIndex < loreList.size()) {
                             String line = TextUtil.ensureDefaultWhite(input.trim());
                             loreList.set(lineIndex, line);
-                            parentGui.getSetupGui().getContext().getPlugin().getConfigManager().playSound(player, "success");
+                            context.getPlugin().getConfigManager().playSound(player, "success");
                         }
                         parentGui.open();
+                        context.setTransitioning(false);
                     },
-                    parentGui::open
+                    () -> {
+                        parentGui.open();
+                        context.setTransitioning(false);
+                    }
             );
         } else if (slot == 13) {
             // 🗑 刪除此行說明
             if (lineIndex >= 0 && lineIndex < loreList.size()) {
                 loreList.remove(lineIndex);
-                parentGui.getSetupGui().getContext().getPlugin().getConfigManager().playSound(player, "click");
+                context.getPlugin().getConfigManager().playSound(player, "click");
             }
+            context.setTransitioning(true);
             parentGui.open();
+            context.setTransitioning(false);
         } else if (slot == 15) {
             // ⬅ 返回說明列表
-            parentGui.getSetupGui().getContext().getPlugin().getConfigManager().playSound(player, "click");
+            context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             parentGui.open();
+            context.setTransitioning(false);
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        VaultWizardContext context = parentGui.getSetupGui().getContext();
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

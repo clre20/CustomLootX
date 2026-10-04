@@ -59,6 +59,14 @@ public class VaultBlockListener implements Listener {
 
         Player player = event.getPlayer();
 
+        // 0. 若為未儲存草稿物品，禁止放置
+        if (plugin.getItemManager().isDraftItem(item)) {
+            event.setCancelled(true);
+            plugin.getConfigManager().send(player, "cannot-place-draft");
+            plugin.getConfigManager().playSound(player, "error");
+            return;
+        }
+
         // 1. 若為空白未設定物品，禁止放置
         if (plugin.getItemManager().isBlankVaultItem(item)) {
             event.setCancelled(true);
@@ -210,6 +218,12 @@ public class VaultBlockListener implements Listener {
                 openVaultWizard(player, held);
                 return;
             } else if (action == Action.RIGHT_CLICK_BLOCK) {
+                if (plugin.getItemManager().isDraftItem(held)) {
+                    event.setCancelled(true);
+                    plugin.getConfigManager().send(player, "cannot-place-draft");
+                    plugin.getConfigManager().playSound(player, "error");
+                    return;
+                }
                 if (plugin.getItemManager().isBlankVaultItem(held)) {
                     event.setCancelled(true);
                     plugin.getConfigManager().send(player, "empty-block-warning");
@@ -394,6 +408,62 @@ public class VaultBlockListener implements Listener {
     }
 
     private void openVaultWizard(Player player, ItemStack held) {
+        // 檢查手持物品是否為草稿
+        if (plugin.getItemManager().isDraftItem(held)) {
+            if (plugin.getItemManager().isDraftExpired(held)) {
+                plugin.getItemManager().markDraftExpired(held);
+                plugin.getConfigManager().send(player, "draft-expired-reverted");
+                plugin.getConfigManager().playSound(player, "error");
+                plugin.getItemManager().removeDraft(held);
+
+                String origName = plugin.getItemManager().getDraftOriginalName(held);
+                if (origName != null && plugin.getVaultTemplateManager().getTemplate(origName) != null) {
+                    VaultTemplate orig = plugin.getVaultTemplateManager().getTemplate(origName);
+                    plugin.getItemManager().updatePlayerHeldVaultItem(player, orig);
+                    VaultWizardContext context = new VaultWizardContext(plugin, player, orig.cloneTemplate(), held, true);
+                    new VaultWizardStep1Gui(context).open();
+                } else {
+                    ItemStack blank = plugin.getItemManager().createBlankVaultItem(false);
+                    player.getInventory().setItemInMainHand(blank);
+                    VaultTemplate vt = new VaultTemplate("<未設定>", false, "<未設定>", new ItemStack(Material.TRIAL_KEY), 3, VaultCooldownMode.PLAYER_COOLDOWN, 10, new java.util.ArrayList<>());
+                    VaultWizardContext context = new VaultWizardContext(plugin, player, vt, blank, false);
+                    new VaultWizardStep1Gui(context).open();
+                }
+                return;
+            }
+
+            String draftId = plugin.getItemManager().getDraftId(held);
+            clre20.customLootX.model.DraftSession session = plugin.getDraftManager().loadDraft(clre20.customLootX.model.DraftType.VAULT, draftId);
+            if (session == null || !(session.getTemplateData() instanceof VaultTemplate vt)) {
+                plugin.getItemManager().markDraftExpired(held);
+                plugin.getConfigManager().send(player, "draft-expired-reverted");
+                plugin.getConfigManager().playSound(player, "error");
+                plugin.getItemManager().removeDraft(held);
+
+                String origName = plugin.getItemManager().getDraftOriginalName(held);
+                if (origName != null && plugin.getVaultTemplateManager().getTemplate(origName) != null) {
+                    VaultTemplate orig = plugin.getVaultTemplateManager().getTemplate(origName);
+                    plugin.getItemManager().updatePlayerHeldVaultItem(player, orig);
+                    VaultWizardContext context = new VaultWizardContext(plugin, player, orig.cloneTemplate(), held, true);
+                    new VaultWizardStep1Gui(context).open();
+                } else {
+                    ItemStack blank = plugin.getItemManager().createBlankVaultItem(false);
+                    player.getInventory().setItemInMainHand(blank);
+                    VaultTemplate nvt = new VaultTemplate("<未設定>", false, "<未設定>", new ItemStack(Material.TRIAL_KEY), 3, VaultCooldownMode.PLAYER_COOLDOWN, 10, new java.util.ArrayList<>());
+                    VaultWizardContext context = new VaultWizardContext(plugin, player, nvt, blank, false);
+                    new VaultWizardStep1Gui(context).open();
+                }
+                return;
+            }
+
+            boolean isExisting = session.getOriginalName() != null;
+            VaultWizardContext context = new VaultWizardContext(plugin, player, vt, held, isExisting, draftId, true);
+            plugin.getConfigManager().playSound(player, "click");
+            plugin.getConfigManager().send(player, "draft-loaded");
+            new VaultWizardStep1Gui(context).open();
+            return;
+        }
+
         String templateName = plugin.getItemManager().getVaultTemplateName(held);
         VaultTemplate template = null;
         boolean isExisting = false;

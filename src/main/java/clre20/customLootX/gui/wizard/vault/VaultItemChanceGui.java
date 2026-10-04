@@ -148,11 +148,14 @@ public class VaultItemChanceGui extends CustomGuiHolder {
             case 18 -> {
                 // 返回掉落池
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new VaultWizardStep4LootGui(context, 1).open();
+                context.setTransitioning(false);
             }
             case 21 -> {
                 // 聊天室輸入
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 context.getPlugin().getChatInputManager().requestInput(
                         player,
                         context.getPlugin().getConfigManager().getRawMessage("input-prompt"),
@@ -173,10 +176,12 @@ public class VaultItemChanceGui extends CustomGuiHolder {
                             }
                             render();
                             open();
+                            context.setTransitioning(false);
                         },
                         () -> {
                             render();
                             open();
+                            context.setTransitioning(false);
                         }
                 );
             }
@@ -198,8 +203,17 @@ public class VaultItemChanceGui extends CustomGuiHolder {
                 // 移除此掉落物
                 context.getTemplate().getItems().remove(targetItem);
                 context.getPlugin().getConfigManager().playSound(player, "save");
+                context.setTransitioning(true);
                 new VaultWizardStep4LootGui(context, 1).open();
+                context.setTransitioning(false);
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 

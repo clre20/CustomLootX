@@ -133,7 +133,9 @@ public class WizardStep2Gui extends CustomGuiHolder {
             case 14 -> {
                 // Open dedicated time adjustment screen
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new WizardResetTimeGui(context).open();
+                context.setTransitioning(false);
             }
             case 18 -> {
                 // Back to Step 1
@@ -145,6 +147,13 @@ public class WizardStep2Gui extends CustomGuiHolder {
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 context.openStep3();
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

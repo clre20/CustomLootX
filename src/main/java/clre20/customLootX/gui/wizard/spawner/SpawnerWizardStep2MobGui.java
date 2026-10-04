@@ -275,7 +275,9 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
                     }
                 } else {
                     context.getPlugin().getConfigManager().playSound(player, "click");
+                    context.setTransitioning(true);
                     new SpawnerMobChanceGui(context, target).open();
+                    context.setTransitioning(false);
                 }
             }
             return;
@@ -286,18 +288,24 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
             case 45 -> {
                 // 返回步驟一
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerWizardStep1Gui(context).open();
+                context.setTransitioning(false);
             }
             case 46 -> {
                 // 新增原版怪物
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerVanillaMobSelectGui(context, 1).open();
+                context.setTransitioning(false);
             }
             case 47 -> {
                 // 新增 MythicMob
                 if (MythicMobHook.isEnabled()) {
                     context.getPlugin().getConfigManager().playSound(player, "click");
+                    context.setTransitioning(true);
                     new SpawnerMythicMobSelectGui(context, 1).open();
+                    context.setTransitioning(false);
                 } else {
                     player.sendMessage(TextUtil.parse("&c[CustomLootX] 伺服器未啟用 MythicMobs 插件！"));
                     context.getPlugin().getConfigManager().playSound(player, "error");
@@ -368,12 +376,21 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
                 // 下一步 (步驟三：波次與數量設定)
                 if (context.getTemplate().isTotalMobChanceValid()) {
                     context.getPlugin().getConfigManager().playSound(player, "click");
+                    context.setTransitioning(true);
                     new SpawnerWizardStep3WavesGui(context).open();
+                    context.setTransitioning(false);
                 } else {
                     player.sendMessage(TextUtil.parse("&c[CustomLootX] 怪物池機率總和必須恰好為 100.00%！"));
                     context.getPlugin().getConfigManager().playSound(player, "error");
                 }
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 

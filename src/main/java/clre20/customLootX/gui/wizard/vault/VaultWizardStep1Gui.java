@@ -142,10 +142,12 @@ public class VaultWizardStep1Gui extends CustomGuiHolder {
         } else if (slot == 14) {
             // 點擊設定名稱
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             context.getPlugin().getChatInputManager().requestInput(
                     player,
                     context.getPlugin().getConfigManager().getRawMessage("name-prompt"),
                     input -> {
+                        context.setTransitioning(false);
                         String trimmed = input.trim();
                         if (!trimmed.matches("^[a-zA-Z0-9_]+$")) {
                             context.getPlugin().getConfigManager().send(player, "name-invalid");
@@ -167,12 +169,13 @@ public class VaultWizardStep1Gui extends CustomGuiHolder {
                         open();
                     },
                     () -> {
+                        context.setTransitioning(false);
                         render();
                         open();
                     }
             );
         } else if (slot == 18) {
-            // 取消
+            // 取消 / 關閉 -> 存草稿
             context.getPlugin().getConfigManager().playSound(player, "click");
             player.closeInventory();
         } else if (slot == 26) {
@@ -184,7 +187,16 @@ public class VaultWizardStep1Gui extends CustomGuiHolder {
                 return;
             }
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultKeySetupGui(context).open();
+            context.setTransitioning(false);
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

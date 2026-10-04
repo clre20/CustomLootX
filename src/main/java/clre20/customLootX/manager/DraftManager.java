@@ -1,0 +1,412 @@
+package clre20.customLootX.manager;
+
+import clre20.customLootX.CustomLootX;
+import clre20.customLootX.model.*;
+import clre20.customLootX.util.TextUtil;
+import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.EntityType;
+import org.bukkit.inventory.ItemStack;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.*;
+
+public class DraftManager {
+
+    private final CustomLootX plugin;
+    private final File baseDraftsDir;
+
+    public DraftManager(CustomLootX plugin) {
+        this.plugin = plugin;
+        this.baseDraftsDir = new File(plugin.getDataFolder(), "drafts");
+        ensureDirectories();
+    }
+
+    private void ensureDirectories() {
+        for (DraftType type : DraftType.values()) {
+            File dir = getDraftDir(type);
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+        }
+    }
+
+    public File getDraftDir(DraftType type) {
+        return new File(baseDraftsDir, type.getFolderName());
+    }
+
+    public int getExpireDays() {
+        return plugin.getConfigManager().getConfig().getInt("settings.draft.expire-days", 7);
+    }
+
+    /**
+     * 生成短唯一識別碼
+     */
+    public String generateDraftId() {
+        return "d_" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    /**
+     * 儲存或更新草稿
+     */
+    public DraftSession saveDraft(DraftType type, String draftId, String originalName, Object templateData) {
+        if (type == null || templateData == null) return null;
+        if (draftId == null || draftId.trim().isEmpty()) {
+            draftId = generateDraftId();
+        }
+
+        File file = new File(getDraftDir(type), draftId + ".yml");
+        YamlConfiguration yaml = new YamlConfiguration();
+
+        long now = System.currentTimeMillis();
+        long expireTime = now + (getExpireDays() * 86400000L);
+
+        // Header info
+        yaml.set("draft.id", draftId);
+        yaml.set("draft.type", type.name());
+        yaml.set("draft.original-name", originalName);
+        yaml.set("draft.created-time", now);
+        yaml.set("draft.expire-time", expireTime);
+
+        // Serialize body
+        if (templateData instanceof LootTemplate lt) {
+            serializeLootTemplate(yaml, lt);
+        } else if (templateData instanceof VaultTemplate vt) {
+            serializeVaultTemplate(yaml, vt);
+        } else if (templateData instanceof SpawnerTemplate st) {
+            serializeSpawnerTemplate(yaml, st);
+        }
+
+        try {
+            yaml.save(file);
+            return new DraftSession(draftId, type, originalName, now, expireTime, templateData);
+        } catch (IOException e) {
+            plugin.logError("&c[草稿·儲存]&c 儲存草稿檔案失敗: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 讀取草稿
+     */
+    public DraftSession loadDraft(DraftType type, String draftId) {
+        if (type == null || draftId == null || draftId.trim().isEmpty()) return null;
+
+        File file = new File(getDraftDir(type), draftId + ".yml");
+        if (!file.exists()) return null;
+
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+        long createdTime = yaml.getLong("draft.created-time", System.currentTimeMillis());
+        long expireTime = yaml.getLong("draft.expire-time", 0);
+        String originalName = yaml.getString("draft.original-name", null);
+
+        Object templateData = null;
+        if (type == DraftType.SUSPICIOUS) {
+            templateData = deserializeLootTemplate(yaml);
+        } else if (type == DraftType.VAULT) {
+            templateData = deserializeVaultTemplate(yaml);
+        } else if (type == DraftType.SPAWNER) {
+            templateData = deserializeSpawnerTemplate(yaml);
+        }
+
+        if (templateData == null) return null;
+
+        return new DraftSession(draftId, type, originalName, createdTime, expireTime, templateData);
+    }
+
+    /**
+     * 檢查草稿檔案是否存在
+     */
+    public boolean hasDraft(DraftType type, String draftId) {
+        if (type == null || draftId == null || draftId.trim().isEmpty()) return false;
+        File file = new File(getDraftDir(type), draftId + ".yml");
+        return file.exists();
+    }
+
+    /**
+     * 刪除指定草稿
+     */
+    public boolean deleteDraft(DraftType type, String draftId) {
+        if (type == null || draftId == null || draftId.trim().isEmpty()) return false;
+        File file = new File(getDraftDir(type), draftId + ".yml");
+        if (file.exists()) {
+            return file.delete();
+        }
+        return false;
+    }
+
+    /**
+     * 清理所有已過期的草稿檔案
+     */
+    public int cleanExpiredDrafts() {
+        int cleaned = 0;
+        long now = System.currentTimeMillis();
+        for (DraftType type : DraftType.values()) {
+            File dir = getDraftDir(type);
+            if (!dir.exists()) continue;
+
+            File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
+            if (files == null) continue;
+
+            for (File file : files) {
+                try {
+                    YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+                    long expire = yaml.getLong("draft.expire-time", 0);
+                    if (expire > 0 && now > expire) {
+                        if (file.delete()) {
+                            cleaned++;
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+        return cleaned;
+    }
+
+    // ==========================================
+    // Serialization & Deserialization Helpers
+    // ==========================================
+
+    private void serializeLootTemplate(YamlConfiguration yaml, LootTemplate template) {
+        yaml.set("name", template.getName());
+        yaml.set("type", template.getType().name());
+        yaml.set("display-name", template.getDisplayName());
+        yaml.set("reset-enabled", template.isResetEnabled());
+        yaml.set("reset-minutes", template.getResetMinutes());
+
+        List<Map<String, Object>> itemsList = new ArrayList<>();
+        List<LootItem> items = template.getItems();
+        for (int i = 0; i < items.size(); i++) {
+            LootItem item = items.get(i);
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("slot", i);
+            map.put("chance", item.getChance());
+            map.put("is-air", item.isAir());
+            if (!item.isAir() && item.getItem() != null) {
+                map.put("item", item.getItem());
+            }
+            itemsList.add(map);
+        }
+        yaml.set("items", itemsList);
+    }
+
+    private LootTemplate deserializeLootTemplate(YamlConfiguration yaml) {
+        String name = yaml.getString("name", "");
+        String typeStr = yaml.getString("type", "SUSPICIOUS_SAND");
+        Material type = Material.getMaterial(typeStr);
+        if (type == null) type = Material.SUSPICIOUS_SAND;
+
+        LootTemplate template = new LootTemplate(name, type);
+        template.setDisplayName(yaml.getString("display-name", null));
+        template.setResetEnabled(yaml.getBoolean("reset-enabled", false));
+        template.setResetMinutes(yaml.getInt("reset-minutes", 5));
+
+        List<?> list = yaml.getList("items");
+        if (list != null) {
+            for (Object obj : list) {
+                if (obj instanceof Map<?, ?> map) {
+                    double chance = 0.0;
+                    Object cObj = map.get("chance");
+                    if (cObj instanceof Number n) chance = n.doubleValue();
+                    boolean isAir = Boolean.TRUE.equals(map.get("is-air"));
+                    ItemStack item = null;
+                    Object iObj = map.get("item");
+                    if (iObj instanceof ItemStack is) item = is;
+
+                    if (isAir || item == null) {
+                        template.addItem(new LootItem(chance, true));
+                    } else {
+                        template.addItem(new LootItem(item, chance));
+                    }
+                }
+            }
+        }
+        return template;
+    }
+
+    private void serializeVaultTemplate(YamlConfiguration yaml, VaultTemplate template) {
+        yaml.set("name", template.getName());
+        yaml.set("ominous", template.isOminous());
+        yaml.set("display-name", template.getDisplayName());
+        yaml.set("key-item", template.getKeyItem());
+        yaml.set("roll-count", template.getRollCount());
+        yaml.set("cooldown.mode", template.getCooldownMode().name());
+        yaml.set("cooldown.minutes", template.getCooldownMinutes());
+
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (LootItem loot : template.getItems()) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("chance", TextUtil.roundChance(loot.getChance()));
+            if (loot.isAir() || loot.getItem() == null) {
+                map.put("is-air", true);
+            } else {
+                map.put("item", loot.getItem());
+            }
+            list.add(map);
+        }
+        yaml.set("items", list);
+    }
+
+    private VaultTemplate deserializeVaultTemplate(YamlConfiguration yaml) {
+        String name = yaml.getString("name", "");
+        boolean ominous = yaml.getBoolean("ominous", false);
+        String displayName = yaml.getString("display-name", name);
+        ItemStack keyItem = yaml.getItemStack("key-item");
+        if (keyItem == null) {
+            keyItem = new ItemStack(ominous ? Material.OMINOUS_TRIAL_KEY : Material.TRIAL_KEY);
+        }
+        int rollCount = yaml.getInt("roll-count", 3);
+        String modeStr = yaml.getString("cooldown.mode", "PLAYER_COOLDOWN");
+        VaultCooldownMode mode = VaultCooldownMode.fromString(modeStr);
+        int cooldownMinutes = yaml.getInt("cooldown.minutes", 10);
+
+        List<LootItem> items = new ArrayList<>();
+        List<?> rawItems = yaml.getList("items");
+        if (rawItems != null) {
+            for (Object obj : rawItems) {
+                if (obj instanceof Map<?, ?> map) {
+                    double chance = 0.0;
+                    Object cObj = map.get("chance");
+                    if (cObj instanceof Number n) chance = n.doubleValue();
+                    boolean isAir = Boolean.TRUE.equals(map.get("is-air"));
+                    ItemStack item = null;
+                    Object iObj = map.get("item");
+                    if (iObj instanceof ItemStack is) item = is;
+
+                    if (isAir || item == null) {
+                        items.add(new LootItem(chance, true));
+                    } else {
+                        items.add(new LootItem(item, chance));
+                    }
+                }
+            }
+        }
+        return new VaultTemplate(name, ominous, displayName, keyItem, rollCount, mode, cooldownMinutes, items);
+    }
+
+    private void serializeSpawnerTemplate(YamlConfiguration yaml, SpawnerTemplate template) {
+        yaml.set("name", template.getName());
+        yaml.set("ominous", template.isOminous());
+        yaml.set("display-name", template.getDisplayName());
+        yaml.set("display-cycle", template.isDisplayCycle());
+        if (template.getDisplayMobId() != null) {
+            yaml.set("display-mob-id", template.getDisplayMobId());
+        }
+        yaml.set("spawned-type", template.getSpawnedType().name());
+
+        List<Map<String, Object>> mobList = new ArrayList<>();
+        for (SpawnerMobEntry entry : template.getMobPool()) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("mythic", entry.isMythic());
+            map.put("id", entry.getMobId());
+            if (entry.getCustomDisplayName() != null) {
+                map.put("display-name", entry.getCustomDisplayName());
+            }
+            map.put("chance", TextUtil.roundChance(entry.getChance()));
+            mobList.add(map);
+        }
+        yaml.set("mobs", mobList);
+
+        yaml.set("wave.total-mobs", template.getTotalMobs());
+        yaml.set("wave.simultaneous-mobs", template.getSimultaneousMobs());
+        yaml.set("wave.spawn-delay-seconds", template.getSpawnDelaySeconds());
+        yaml.set("wave.player-range", template.getPlayerRange());
+        yaml.set("show-actionbar", template.isShowActionBar());
+        yaml.set("victory-sound.enabled", template.isVictorySoundEnabled());
+        yaml.set("victory-sound.sound", template.getVictorySound());
+        yaml.set("victory-sound.volume", template.getVictorySoundVolume());
+        yaml.set("victory-sound.pitch", template.getVictorySoundPitch());
+        yaml.set("cooldown.mode", template.getCooldownMode().name());
+        yaml.set("cooldown.minutes", template.getCooldownMinutes());
+        yaml.set("roll-count", template.getRollCount());
+
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (LootItem loot : template.getRewards()) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("chance", TextUtil.roundChance(loot.getChance()));
+            if (loot.isAir() || loot.getItem() == null) {
+                map.put("is-air", true);
+            } else {
+                map.put("item", loot.getItem());
+            }
+            list.add(map);
+        }
+        yaml.set("items", list);
+    }
+
+    private SpawnerTemplate deserializeSpawnerTemplate(YamlConfiguration yaml) {
+        String name = yaml.getString("name", "");
+        boolean ominous = yaml.getBoolean("ominous", false);
+        String displayName = yaml.getString("display-name", name);
+        boolean displayCycle = yaml.getBoolean("display-cycle", false);
+        String displayMobId = yaml.getString("display-mob-id", null);
+        String typeStr = yaml.getString("spawned-type", "ZOMBIE");
+        EntityType spawnedType;
+        try {
+            spawnedType = EntityType.valueOf(typeStr);
+        } catch (Exception e) {
+            spawnedType = EntityType.ZOMBIE;
+        }
+
+        List<SpawnerMobEntry> mobPool = new ArrayList<>();
+        List<?> rawMobs = yaml.getList("mobs");
+        if (rawMobs != null) {
+            for (Object obj : rawMobs) {
+                if (obj instanceof Map<?, ?> map) {
+                    boolean mythic = Boolean.TRUE.equals(map.get("mythic"));
+                    String id = String.valueOf(map.get("id"));
+                    String customName = (String) map.get("display-name");
+                    double chance = 0.0;
+                    Object cObj = map.get("chance");
+                    if (cObj instanceof Number n) chance = n.doubleValue();
+                    mobPool.add(new SpawnerMobEntry(mythic, id, customName, chance));
+                }
+            }
+        }
+
+        int totalMobs = yaml.getInt("wave.total-mobs", 6);
+        int simultaneousMobs = yaml.getInt("wave.simultaneous-mobs", 3);
+        int spawnDelaySeconds = yaml.getInt("wave.spawn-delay-seconds", 2);
+        int playerRange = yaml.getInt("wave.player-range", 14);
+
+        String modeStr = yaml.getString("cooldown.mode", "GLOBAL_COOLDOWN");
+        VaultCooldownMode mode = VaultCooldownMode.fromString(modeStr);
+        int cooldownMinutes = yaml.getInt("cooldown.minutes", 30);
+        int rollCount = yaml.getInt("roll-count", 2);
+
+        List<LootItem> items = new ArrayList<>();
+        List<?> rawItems = yaml.getList("items");
+        if (rawItems != null) {
+            for (Object obj : rawItems) {
+                if (obj instanceof Map<?, ?> map) {
+                    double chance = 0.0;
+                    Object cObj = map.get("chance");
+                    if (cObj instanceof Number n) chance = n.doubleValue();
+                    boolean isAir = Boolean.TRUE.equals(map.get("is-air"));
+                    ItemStack item = null;
+                    Object iObj = map.get("item");
+                    if (iObj instanceof ItemStack is) item = is;
+
+                    if (isAir || item == null) {
+                        items.add(new LootItem(chance, true));
+                    } else {
+                        items.add(new LootItem(item, chance));
+                    }
+                }
+            }
+        }
+
+        boolean showActionBar = yaml.getBoolean("show-actionbar", true);
+        boolean victorySoundEnabled = yaml.getBoolean("victory-sound.enabled", false);
+        String victorySound = yaml.getString("victory-sound.sound", "UI_TOAST_CHALLENGE_COMPLETE");
+        float victorySoundVolume = (float) yaml.getDouble("victory-sound.volume", 1.0);
+        float victorySoundPitch = (float) yaml.getDouble("victory-sound.pitch", 1.2);
+
+        return new SpawnerTemplate(name, ominous, displayName, spawnedType, displayCycle, displayMobId,
+                mobPool, totalMobs, simultaneousMobs,
+                spawnDelaySeconds, playerRange, showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
+                mode, cooldownMinutes, rollCount, items);
+    }
+}

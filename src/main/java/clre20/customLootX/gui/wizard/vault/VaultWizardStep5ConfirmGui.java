@@ -195,6 +195,15 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
         List<String> backLore = context.getPlugin().getConfigManager().getStringList("gui.vault.step5.back-to-step4-lore", List.of("&7返回 [步驟 4/5] 調整物品與機率"));
         inventory.setItem(27, createButton(Material.ARROW, backName, backLore));
 
+        // Slot 31 (中間底部): 放棄變更/清除草稿
+        String abandonName = "&c✖ 放棄變更並關閉";
+        List<String> abandonLore = List.of(
+                "&7若有暫存草稿，將自動清除",
+                "&7手持物品將還原為原始狀態",
+                "&c點擊放棄本次所有編輯"
+        );
+        inventory.setItem(31, createButton(Material.BARRIER, abandonName, abandonLore));
+
         // Slot 35 (右下角): 確認送出儲存
         String confirmName = context.getPlugin().getConfigManager().getText("gui.step4.confirm-button-name", "&a✔ 確認送出並儲存");
         List<String> confirmLore = context.getPlugin().getConfigManager().getStringList(
@@ -244,19 +253,49 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
         if (slot == 3 || slot == 5) {
             // 返回步驟一
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultWizardStep1Gui(context).open();
+            context.setTransitioning(false);
         } else if (slot == 11) {
             // 返回步驟二 (專屬鑰匙設定)
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultKeySetupGui(context).open();
+            context.setTransitioning(false);
         } else if (slot == 13 || slot == 15) {
             // 返回步驟三 (冷卻與出貨設定)
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultWizardStep3CooldownGui(context).open();
+            context.setTransitioning(false);
         } else if (slot >= 18 && slot <= 27) {
             // 返回步驟四 (掉落池)
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultWizardStep4LootGui(context, 1).open();
+            context.setTransitioning(false);
+        } else if (slot == 31) {
+            // 放棄變更並清除草稿
+            context.setDraftAbandoned(true);
+            if (context.getDraftId() != null) {
+                context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.VAULT, context.getDraftId());
+            }
+            ItemStack held = context.getItemInHand();
+            if (held == null || held.getType().isAir()) {
+                held = player.getInventory().getItemInMainHand();
+            }
+            context.getPlugin().getItemManager().removeDraft(held);
+            String origName = context.getOriginalName();
+            if (origName != null && context.getPlugin().getVaultTemplateManager().getTemplate(origName) != null) {
+                VaultTemplate origT = context.getPlugin().getVaultTemplateManager().getTemplate(origName);
+                context.getPlugin().getItemManager().updatePlayerHeldVaultItem(player, origT);
+            } else {
+                ItemStack blank = context.getPlugin().getItemManager().createBlankVaultItem(context.getTemplate().isOminous());
+                player.getInventory().setItemInMainHand(blank);
+            }
+            context.getPlugin().getConfigManager().send(player, "save-cancelled");
+            context.getPlugin().getConfigManager().playSound(player, "click");
+            player.closeInventory();
         } else if (slot == 35) {
             // 確認送出
             VaultTemplate template = context.getTemplate();
@@ -288,7 +327,14 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
             // 4. 儲存至 /data/vault/[name].yml
             boolean success = context.getPlugin().getVaultTemplateManager().saveTemplate(template);
             if (success) {
-                // 更新手中物品
+                context.setSavedSuccessfully(true);
+                // 刪除草稿檔案
+                if (context.getDraftId() != null) {
+                    context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.VAULT, context.getDraftId());
+                }
+                // 移除手持物品草稿標記並更新
+                ItemStack held = player.getInventory().getItemInMainHand();
+                context.getPlugin().getItemManager().removeDraft(held);
                 context.getPlugin().getItemManager().updatePlayerHeldVaultItem(player, template);
                 // 同步其他線上玩家
                 context.getPlugin().getItemManager().updateAllOnlinePlayersVaultItems(template);
@@ -310,6 +356,13 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
                 context.getPlugin().getConfigManager().send(player, "save-failed");
                 context.getPlugin().getConfigManager().playSound(player, "error");
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

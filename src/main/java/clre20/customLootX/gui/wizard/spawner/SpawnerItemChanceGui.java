@@ -145,11 +145,14 @@ public class SpawnerItemChanceGui extends CustomGuiHolder {
             case 18 -> {
                 // 返回掉落池
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerWizardStep5LootGui(context, 1).open();
+                context.setTransitioning(false);
             }
             case 21 -> {
                 // 聊天室輸入
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 context.getPlugin().getChatInputManager().requestInput(
                         player,
                         context.getPlugin().getConfigManager().getRawMessage("input-prompt"),
@@ -169,10 +172,12 @@ public class SpawnerItemChanceGui extends CustomGuiHolder {
                             }
                             render();
                             open();
+                            context.setTransitioning(false);
                         },
                         () -> {
                             render();
                             open();
+                            context.setTransitioning(false);
                         }
                 );
             }
@@ -194,8 +199,17 @@ public class SpawnerItemChanceGui extends CustomGuiHolder {
                 // 刪除此物品
                 context.getTemplate().getRewards().remove(targetItem);
                 context.getPlugin().getConfigManager().playSound(player, "success");
+                context.setTransitioning(true);
                 new SpawnerWizardStep5LootGui(context, 1).open();
+                context.setTransitioning(false);
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 

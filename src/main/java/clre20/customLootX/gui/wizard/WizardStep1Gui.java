@@ -151,10 +151,12 @@ public class WizardStep1Gui extends CustomGuiHolder {
             case 14 -> {
                 // Input name in chat
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 context.getPlugin().getChatInputManager().requestInput(
                         player,
                         context.getPlugin().getConfigManager().getRawMessage("name-prompt"),
                         input -> {
+                            context.setTransitioning(false);
                             if (!input.matches("^[a-zA-Z0-9_-]+$")) {
                                 context.getPlugin().getConfigManager().send(player, "name-invalid");
                                 context.getPlugin().getConfigManager().playSound(player, "error");
@@ -167,13 +169,14 @@ public class WizardStep1Gui extends CustomGuiHolder {
                             open();
                         },
                         () -> {
+                            context.setTransitioning(false);
                             render();
                             open();
                         }
                 );
             }
             case 18 -> {
-                // Cancel
+                // Cancel / Close -> save draft
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 player.closeInventory();
             }
@@ -189,6 +192,13 @@ public class WizardStep1Gui extends CustomGuiHolder {
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 context.openStep2();
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

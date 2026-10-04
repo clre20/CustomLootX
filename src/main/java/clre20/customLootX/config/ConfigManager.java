@@ -36,6 +36,8 @@ public class ConfigManager {
         defaultFallbacks.put("input-invalid", "&c輸入數值無效，請輸入介於 0.01 到 100.00 的有效數字（最多兩位小數）！");
         defaultFallbacks.put("input-success", "&a已將物品機率調整為: &e%chance%&a！");
         defaultFallbacks.put("input-cancelled", "&e已取消輸入操作。");
+        defaultFallbacks.put("chance-invalid", "&c機率數值無效！請輸入介於 0.01 到 100.00 的有效數字。");
+        defaultFallbacks.put("chance-not-100", "&c怪物池機率總和必須恰好為 100.00%（目前總和: &e%total%&c，差額: &e%diff%&c）！");
         defaultFallbacks.put("time-prompt", "&e請在聊天室輸入自動重置時間（單位：分鐘，請輸入大於等於 1 的整數），輸入 &ccancel &e取消：");
         defaultFallbacks.put("time-min-invalid", "&c時間必須至少為 1 分鐘！");
         defaultFallbacks.put("time-invalid", "&c請輸入有效的整數數字！");
@@ -61,6 +63,32 @@ public class ConfigManager {
         defaultFallbacks.put("give-console-target-required", "&c主控台執行時必須指定目標玩家！用法: /%label% give <suspicious|vault|spawner> <名稱> <給誰> [數量]");
         defaultFallbacks.put("edit-usage", "&c用法: /%label% edit <suspicious|vault|spawner> <名稱>");
         defaultFallbacks.put("delete-usage", "&c用法: /%label% delete <suspicious|vault|spawner> <名稱>");
+        defaultFallbacks.put("draft-saved", "&a已為您暫存當前編輯進度至手持方塊中（草稿保留 %days% 天）。");
+        defaultFallbacks.put("draft-loaded", "&a已為您還原上次未儲存的草稿編輯進度！");
+        defaultFallbacks.put("draft-expired-reverted", "&e此方塊的草稿已過期，已自動載入正式版本！");
+        defaultFallbacks.put("save-cancelled", "&e已放棄變更並清理草稿暫存檔案。");
+        defaultFallbacks.put("cannot-place-draft", "&c此方塊包含尚未儲存的草稿！請手持對空氣點擊右鍵完成儲存後再放置。");
+        defaultFallbacks.put("save-success", "&a已成功儲存自訂可疑方塊配置: &e%name%&a！");
+        defaultFallbacks.put("save-failed", "&c儲存失敗，請檢查後台日誌！");
+        defaultFallbacks.put("sum-not-100", "&c儲存失敗！所有掉落物機率總和必須恰好為 100.00%（目前總和: &e%total%&c，差額: &e%diff%&c）！");
+        defaultFallbacks.put("template-save-failed", "&c儲存配置檔案失敗，請檢查主控台日誌！");
+        defaultFallbacks.put("spawner-save-success", "&a已成功儲存試煉生怪磚配置: &e%name%&a！");
+        defaultFallbacks.put("spawner-in-cooldown", "&c此試煉生怪磚冷卻中！剩餘 &e%time% 秒&c後可再次挑戰。");
+        defaultFallbacks.put("spawner-already-completed", "&c你已經完成過此試煉挑戰，無法再次領取獲勝獎勵！");
+        defaultFallbacks.put("spawner-ready-hint", "&a此試煉生怪磚已就緒！進入感應範圍即可啟動挑戰 (怪物: &e%mob%&a)！");
+        defaultFallbacks.put("spawner-victory", "&a✔ 恭喜完成試煉挑戰！獲勝獎勵已噴發！");
+        defaultFallbacks.put("vault-key-mismatch", "&c解鎖失敗！此寶庫需要鑰匙: &e%key% &c才能開啟！");
+        defaultFallbacks.put("vault-cooldown", "&c此寶庫冷卻中！剩餘 &e%time% &c後可再次開啟。");
+        defaultFallbacks.put("vault-already-rewarded", "&c你已經開啟過此寶庫，無法再次領取戰利品！");
+        defaultFallbacks.put("no-permission", "&c你沒有權限執行此指令！");
+        defaultFallbacks.put("only-player", "&c此指令只能由玩家執行！");
+        defaultFallbacks.put("player-not-found", "&c找不到目標玩家: %player%");
+        defaultFallbacks.put("reload-success", "&aCustomLootX 設定與所有資料重載完成！");
+        defaultFallbacks.put("give-success", "&a已給予玩家 &e%player% &f%amount% 個 &e[%name%] &a自訂方塊！");
+        defaultFallbacks.put("give-self-tip", "&7(手持對空氣右鍵可重新編輯此配置，對地面右鍵可直接放置)");
+        defaultFallbacks.put("template-not-found", "&c找不到名為 &e%name% &c的配置！");
+        defaultFallbacks.put("template-deleted", "&a已成功刪除配置 &e%name%&a！");
+        defaultFallbacks.put("receive-success", "&a你收到了 &f%amount% 個 &e[%name%] &a自訂方塊！");
     }
 
     public void load() {
@@ -213,5 +241,9 @@ public class ConfigManager {
             float pitch = soundKey.equals("save") ? 1.2f : 1.0f;
             player.playSound(player.getLocation(), sound, 1.0f, pitch);
         }
+    }
+
+    public FileConfiguration getConfig() {
+        return config;
     }
 }

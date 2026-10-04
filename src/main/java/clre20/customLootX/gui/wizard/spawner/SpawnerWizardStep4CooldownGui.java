@@ -163,22 +163,37 @@ public class SpawnerWizardStep4CooldownGui extends CustomGuiHolder {
             // 點擊調整冷卻時間
             if (context.getTemplate().getCooldownMode() != VaultCooldownMode.ONCE_PER_PLAYER) {
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerTimeAdjustGui(context).open();
+                context.setTransitioning(false);
             } else {
                 context.getPlugin().getConfigManager().playSound(player, "error");
             }
         } else if (slot == 15) {
             // 點擊調整每次出貨數量
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerCountAdjustGui(context, SpawnerCountAdjustGui.TargetSetting.ROLL_COUNT).open();
+            context.setTransitioning(false);
         } else if (slot == 18) {
             // 上一步
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep3WavesGui(context).open();
+            context.setTransitioning(false);
         } else if (slot == 26) {
             // 下一步 (步驟五：獲勝獎勵掉落池)
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep5LootGui(context, 1).open();
+            context.setTransitioning(false);
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

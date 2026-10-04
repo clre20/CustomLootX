@@ -20,6 +20,7 @@ public final class CustomLootX extends JavaPlugin {
     private TemplateManager templateManager;
     private clre20.customLootX.manager.VaultTemplateManager vaultTemplateManager;
     private clre20.customLootX.manager.SpawnerTemplateManager spawnerTemplateManager;
+    private clre20.customLootX.manager.DraftManager draftManager;
     private ItemManager itemManager;
     private ResetManager resetManager;
     private ChatInputManager chatInputManager;
@@ -37,6 +38,7 @@ public final class CustomLootX extends JavaPlugin {
         // Initialize managers
         this.configManager = new ConfigManager(this);
         this.itemManager = new ItemManager(this);
+        this.draftManager = new clre20.customLootX.manager.DraftManager(this);
         this.templateManager = new TemplateManager(this);
         this.vaultTemplateManager = new clre20.customLootX.manager.VaultTemplateManager(this);
         this.spawnerTemplateManager = new clre20.customLootX.manager.SpawnerTemplateManager(this);
@@ -45,6 +47,12 @@ public final class CustomLootX extends JavaPlugin {
         this.guiManager = new GuiManager(this);
         this.playerInteractListener = new PlayerInteractListener(this);
 
+        // 啟動巡檢清理逾期草稿
+        int cleaned = this.draftManager.cleanExpiredDrafts();
+        if (cleaned > 0) {
+            logConsole("&7[草稿·清理]&7 啟動巡檢已自動清除 &c" + cleaned + " &7個逾期草稿檔案。");
+        }
+
         // Register event listeners
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(playerInteractListener, this);
@@ -52,6 +60,7 @@ public final class CustomLootX extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new clre20.customLootX.listener.VaultBlockListener(this), this);
         getServer().getPluginManager().registerEvents(new clre20.customLootX.listener.SpawnerBlockListener(this), this);
         getServer().getPluginManager().registerEvents(new ChatListener(this), this);
+        getServer().getPluginManager().registerEvents(new clre20.customLootX.listener.DraftItemListener(this), this);
 
         try {
             Class.forName("io.papermc.paper.event.block.VaultChangeStateEvent");
@@ -122,6 +131,10 @@ public final class CustomLootX extends JavaPlugin {
 
     public clre20.customLootX.manager.SpawnerTemplateManager getSpawnerTemplateManager() {
         return spawnerTemplateManager;
+    }
+
+    public clre20.customLootX.manager.DraftManager getDraftManager() {
+        return draftManager;
     }
 
     public ItemManager getItemManager() {

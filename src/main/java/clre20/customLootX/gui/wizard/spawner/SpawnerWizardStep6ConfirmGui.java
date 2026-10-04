@@ -182,10 +182,19 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
             }
         }
 
-        // 第四排: 返回 (Slot 27) 與 確認送出 (Slot 31)
+        // 第四排: 返回 (Slot 27)、放棄草稿 (Slot 31) 與 確認送出 (Slot 35)
         String backName = context.getPlugin().getConfigManager().getText("gui.common.back-to-step-name", "&e⬅ 上一步 &f(獲勝獎勵掉落池)");
         List<String> backLore = context.getPlugin().getConfigManager().getStringList("gui.common.back-to-step-lore", List.of("&7返回前一步驟修改機率或物品"));
         inventory.setItem(27, createButton(Material.ARROW, backName, backLore));
+
+        // Slot 31 (中間底部): 放棄變更/清除草稿
+        String abandonName = "&c✖ 放棄變更並關閉";
+        List<String> abandonLore = List.of(
+                "&7若有暫存草稿，將自動清除",
+                "&7手持物品將還原為原始狀態",
+                "&c點擊放棄本次所有編輯"
+        );
+        inventory.setItem(31, createButton(Material.BARRIER, abandonName, abandonLore));
 
         boolean isRewardsValid = template.isTotalChanceValid();
         boolean isMobsValid = template.isTotalMobChanceValid();
@@ -201,7 +210,7 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
                             "&a點擊立即儲存！"
                     )
             );
-            inventory.setItem(31, createButton(Material.EMERALD_BLOCK, confirmName, confirmLore));
+            inventory.setItem(35, createButton(Material.EMERALD_BLOCK, confirmName, confirmLore));
         } else {
             String notReadyName = "&c✖ 無法儲存 (機率未平衡至 100%)";
             List<String> notReadyLore = new ArrayList<>();
@@ -212,7 +221,7 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
                 notReadyLore.add("&c【步驟五】獎勵池總機率: &e" + String.format("%.2f%%", template.getTotalChance()) + " &7(必須為 100.00%)");
             }
             notReadyLore.add("&7請點擊對應步驟使用【自動均分】或調整");
-            inventory.setItem(31, createButton(Material.REDSTONE_BLOCK, notReadyName, notReadyLore));
+            inventory.setItem(35, createButton(Material.REDSTONE_BLOCK, notReadyName, notReadyLore));
         }
     }
 
@@ -241,37 +250,82 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
 
         if (slot == 3 || slot == 5) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep1Gui(context).open();
+            context.setTransitioning(false);
         } else if (slot == 11) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep2MobGui(context, 1).open();
+            context.setTransitioning(false);
         } else if (slot == 13) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep3WavesGui(context).open();
+            context.setTransitioning(false);
         } else if (slot == 15) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep4CooldownGui(context).open();
+            context.setTransitioning(false);
         } else if ((slot >= 19 && slot <= 25) || slot == 27) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep5LootGui(context, 1).open();
+            context.setTransitioning(false);
         } else if (slot == 31) {
+            // 放棄變更並清除草稿
+            context.setDraftAbandoned(true);
+            if (context.getDraftId() != null) {
+                context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.SPAWNER, context.getDraftId());
+            }
+            ItemStack held = context.getItemInHand();
+            if (held == null || held.getType().isAir()) {
+                held = player.getInventory().getItemInMainHand();
+            }
+            context.getPlugin().getItemManager().removeDraft(held);
+            String origName = context.getOriginalName();
+            if (origName != null && context.getPlugin().getSpawnerTemplateManager().getTemplate(origName) != null) {
+                SpawnerTemplate origT = context.getPlugin().getSpawnerTemplateManager().getTemplate(origName);
+                ItemStack configured = context.getPlugin().getItemManager().createTemplateSpawnerItem(origT, held.getAmount());
+                player.getInventory().setItemInMainHand(configured);
+            } else {
+                ItemStack blank = context.getPlugin().getItemManager().createBlankSpawnerItem(context.getTemplate().isOminous());
+                player.getInventory().setItemInMainHand(blank);
+            }
+            context.getPlugin().getConfigManager().send(player, "save-cancelled");
+            context.getPlugin().getConfigManager().playSound(player, "click");
+            player.closeInventory();
+        } else if (slot == 35) {
             // 確認送出與儲存
             SpawnerTemplate template = context.getTemplate();
             if (!template.isTotalMobChanceValid()) {
-                player.sendMessage(TextUtil.parse("&c[CustomLootX] 怪物池機率總和必須恰好為 100.00%！"));
+                double total = template.getTotalMobChance();
+                context.getPlugin().getConfigManager().send(player, "chance-not-100",
+                        "%total%", String.format("%.2f%%", total),
+                        "%diff%", String.format("%.2f%%", Math.abs(100.0 - total)));
                 context.getPlugin().getConfigManager().playSound(player, "error");
                 return;
             }
             if (!template.isTotalChanceValid()) {
-                context.getPlugin().getConfigManager().send(player, "sum-not-100");
+                double total = template.getTotalChance();
+                context.getPlugin().getConfigManager().send(player, "sum-not-100",
+                        "%total%", String.format("%.2f%%", total),
+                        "%diff%", String.format("%.2f%%", Math.abs(100.0 - total)));
                 context.getPlugin().getConfigManager().playSound(player, "error");
                 return;
             }
 
             boolean saved = context.getPlugin().getSpawnerTemplateManager().saveTemplate(template);
             if (saved) {
-                // 更新玩家手持物品
+                context.setSavedSuccessfully(true);
+                // 刪除草稿檔案
+                if (context.getDraftId() != null) {
+                    context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.SPAWNER, context.getDraftId());
+                }
+                // 更新玩家手持物品並移除草稿標籤
                 ItemStack held = player.getInventory().getItemInMainHand();
+                context.getPlugin().getItemManager().removeDraft(held);
                 if (context.getPlugin().getItemManager().isCustomSpawnerItem(held)) {
                     int amount = held.getAmount();
                     ItemStack configured = context.getPlugin().getItemManager().createTemplateSpawnerItem(template, amount);
@@ -295,6 +349,13 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
                 context.getPlugin().getConfigManager().send(player, "template-save-failed");
                 context.getPlugin().getConfigManager().playSound(player, "error");
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

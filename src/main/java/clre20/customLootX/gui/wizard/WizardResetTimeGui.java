@@ -159,10 +159,12 @@ public class WizardResetTimeGui extends CustomGuiHolder {
             }
             case 4 -> {
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 context.getPlugin().getChatInputManager().requestInput(
                         player,
                         context.getPlugin().getConfigManager().getRawMessage("time-prompt"),
                         input -> {
+                            context.setTransitioning(false);
                             try {
                                 int val = Integer.parseInt(input);
                                 if (val < 1) {
@@ -180,6 +182,7 @@ public class WizardResetTimeGui extends CustomGuiHolder {
                             open();
                         },
                         () -> {
+                            context.setTransitioning(false);
                             render();
                             open();
                         }
@@ -189,6 +192,13 @@ public class WizardResetTimeGui extends CustomGuiHolder {
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 context.openStep2();
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

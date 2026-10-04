@@ -116,6 +116,7 @@ public class VaultRollAdjustGui extends CustomGuiHolder {
             case 22 -> {
                 // 聊天室輸入
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 context.getPlugin().getChatInputManager().requestInput(
                         player,
                         context.getPlugin().getConfigManager().getRawMessage("roll-prompt"),
@@ -135,17 +136,28 @@ public class VaultRollAdjustGui extends CustomGuiHolder {
                             }
                             render();
                             open();
+                            context.setTransitioning(false);
                         },
                         () -> {
                             render();
                             open();
+                            context.setTransitioning(false);
                         }
                 );
             }
             case 18, 26 -> {
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new VaultWizardStep3CooldownGui(context).open();
+                context.setTransitioning(false);
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 

@@ -34,4 +34,13 @@ public enum VaultCooldownMode {
         VaultCooldownMode[] values = values();
         return values[(this.ordinal() + 1) % values.length];
     }
+
+    public static VaultCooldownMode fromString(String str) {
+        if (str == null) return PLAYER_COOLDOWN;
+        try {
+            return VaultCooldownMode.valueOf(str.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return PLAYER_COOLDOWN;
+        }
+    }
 }

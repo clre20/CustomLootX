@@ -290,7 +290,9 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
 
             // 左鍵進入機率調整畫面
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerItemChanceGui(context, items.get(itemIndex)).open();
+            context.setTransitioning(false);
             return;
         }
 
@@ -299,7 +301,9 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
             case 45 -> {
                 // 返回步驟四 (冷卻與出貨設定)
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerWizardStep4CooldownGui(context).open();
+                context.setTransitioning(false);
             }
             case 46 -> {
                 // ➕ 添加落空
@@ -344,12 +348,21 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
                 // 下一步 (步驟六：設定確認與儲存)
                 if (template.isTotalChanceValid()) {
                     context.getPlugin().getConfigManager().playSound(player, "click");
+                    context.setTransitioning(true);
                     new SpawnerWizardStep6ConfirmGui(context).open();
+                    context.setTransitioning(false);
                 } else {
                     context.getPlugin().getConfigManager().send(player, "chance-not-100");
                     context.getPlugin().getConfigManager().playSound(player, "error");
                 }
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 

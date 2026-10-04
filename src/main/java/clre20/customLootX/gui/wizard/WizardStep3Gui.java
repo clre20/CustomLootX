@@ -254,11 +254,14 @@ public class WizardStep3Gui extends CustomGuiHolder {
 
             // 左鍵進入機率調整畫面
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             ItemChanceGui chanceGui = new ItemChanceGui(context.getPlugin(), player, template, itemIndex, () -> {
+                context.setTransitioning(false);
                 this.refresh();
                 this.open();
             });
             chanceGui.open();
+            context.setTransitioning(false);
             return;
         }
 
@@ -304,6 +307,13 @@ public class WizardStep3Gui extends CustomGuiHolder {
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 context.openStep4();
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

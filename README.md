@@ -1,5 +1,6 @@
 # CustomLootX
 
+![Release](https://img.shields.io/badge/Release-v1.2.6-orange.svg)
 ![Version](https://img.shields.io/badge/Minecraft-1.21.x%20%7C%2026.x-brightgreen.svg)
 ![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
 
@@ -43,6 +44,12 @@
   * 世界上已放置的方塊與生怪磚採用動態配置讀取架構，**修改設定後地圖上無需重新拆除放置即可即時生效**！
 * **保護機制**：防手滑放置未設定完成的空白樣板方塊。
 
+### 5.草稿暫存保護機制 (Draft System - v1.2.6 新增)
+* **未儲存進度自動暫存**：在步驟精靈設定過程中，若因按 `ESC`、關閉介面或斷線而未點擊最後確認儲存，系統會自動將當前進度序列化儲存至伺服器獨立草稿檔案 (`plugins/CustomLootX/drafts/...`)，並在手持物品上標註草稿 ID 與有效期限。
+* **嚴格防誤放限制**：所有處於未儲存草稿狀態的方塊，一律**嚴格禁止放置於地面**，避免未完成配置損壞地圖環境。
+* **手持右鍵還原編輯**：手持草稿方塊對空氣右鍵，即刻自動載入上次中斷的進度繼續編輯；在確認介面亦可隨時選擇「放棄變更並關閉」一鍵清除草稿檔案與標記。
+* **過期自動巡檢與安全還原**：支援自訂草稿保留天數（預設 7 天），逾期草稿會自動清理；若玩家拿出過期草稿物品，說明即時更新為過期狀態，右鍵空氣安全還原為正式版配置。
+
 ---
 ## 指令與權限說明
 
@@ -71,6 +78,7 @@
 
 # CustomLootX
 
+![Release](https://img.shields.io/badge/Release-v1.2.6-orange.svg)
 ![Version](https://img.shields.io/badge/Minecraft-1.21.x-brightgreen.svg)
 ![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
 
@@ -113,6 +121,12 @@ It seamlessly integrates the core mechanics of 1.21: **Custom Suspicious Blocks 
   * Once saved, templates held in hand or sitting in player inventories update their lore details instantly.
   * Placed blocks and spawners in the world utilize a dynamic configuration lookup architecture—**updates take effect instantly without needing to break and replace them!**
 - **Safety Protection**: Prevents accidental placement of unconfigured blank template blocks.
+
+### 5. Draft Protection System (New in v1.2.6)
+- **Automatic Draft Session Persistence**: If a player exits the wizard GUI via `ESC`, closes the inventory, or disconnects without saving, current progress is automatically serialized to disk (`plugins/CustomLootX/drafts/...`) and stamped onto the item with a unique Draft ID and expiration timestamp.
+- **Strict Ground Placement Restriction**: Unsaved draft blocks are strictly prohibited from being placed onto the ground, safeguarding world environments.
+- **Right-Click Air to Resume**: Right-clicking the air while holding a draft block instantly restores the previous in-progress session. Players can also discard changes and clean up the draft from the final confirmation GUI.
+- **Auto Expiration & Safe Reversion**: Configurable expiration duration (default 7 days). Expired drafts are automatically cleaned up, and held items dynamically notify the player and revert safely to the official configuration upon interaction.
 
 ---
 ## Commands & Permissions

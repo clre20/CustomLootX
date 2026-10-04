@@ -185,6 +185,15 @@ public class WizardStep4ConfirmGui extends CustomGuiHolder {
         List<String> backLore = context.getPlugin().getConfigManager().getStringList("gui.common.back-to-step3-lore", List.of("&7返回 [步驟 3/4] 調整物品與機率"));
         inventory.setItem(27, createButton(Material.ARROW, backName, backLore));
 
+        // Slot 31 (中間底部): 放棄變更/清除草稿
+        String abandonName = "&c✖ 放棄變更並關閉";
+        List<String> abandonLore = List.of(
+                "&7若有暫存草稿，將自動清除",
+                "&7手持物品將還原為原始狀態",
+                "&c點擊放棄本次所有編輯"
+        );
+        inventory.setItem(31, createButton(Material.BARRIER, abandonName, abandonLore));
+
         // Slot 35 (右下角): 確認送出
         String confirmName = context.getPlugin().getConfigManager().getText("gui.step4.confirm-button-name", "&a✔ 確認送出並儲存");
         List<String> confirmLore = context.getPlugin().getConfigManager().getStringList(
@@ -250,6 +259,31 @@ public class WizardStep4ConfirmGui extends CustomGuiHolder {
             return;
         }
 
+        // Slot 31: Abandon draft
+        if (slot == 31) {
+            context.setDraftAbandoned(true);
+            if (context.getDraftId() != null) {
+                context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.SUSPICIOUS, context.getDraftId());
+            }
+            ItemStack held = context.getItemInHand();
+            if (held == null || held.getType().isAir()) {
+                held = player.getInventory().getItemInMainHand();
+            }
+            context.getPlugin().getItemManager().removeDraft(held);
+            String origName = context.getOriginalName();
+            if (origName != null && context.getPlugin().getTemplateManager().hasTemplate(origName)) {
+                LootTemplate origT = context.getPlugin().getTemplateManager().getTemplate(origName);
+                context.getPlugin().getItemManager().updateHoldingItem(player, origT);
+            } else {
+                ItemStack blank = context.getPlugin().getItemManager().createBlankItem(context.getTemplate().getType());
+                player.getInventory().setItemInMainHand(blank);
+            }
+            context.getPlugin().getConfigManager().send(player, "save-cancelled");
+            context.getPlugin().getConfigManager().playSound(player, "click");
+            player.closeInventory();
+            return;
+        }
+
         // Slot 35: Confirm & Save
         if (slot == 35) {
             if (!template.isValidTotal()) {
@@ -271,7 +305,14 @@ public class WizardStep4ConfirmGui extends CustomGuiHolder {
 
             boolean saved = context.getPlugin().getTemplateManager().saveTemplate(template);
             if (saved) {
-                // Update player's held item and all online players' inventories with updated Lore
+                context.setSavedSuccessfully(true);
+                // 刪除草稿檔案
+                if (context.getDraftId() != null) {
+                    context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.SUSPICIOUS, context.getDraftId());
+                }
+                // 移除手持物品草稿標記並更新正式 Lore
+                ItemStack held = player.getInventory().getItemInMainHand();
+                context.getPlugin().getItemManager().removeDraft(held);
                 context.getPlugin().getItemManager().updateHoldingItem(player, template);
                 context.getPlugin().getItemManager().updateAllOnlinePlayersItems(template);
                 context.getPlugin().getConfigManager().send(player, "save-success", "%name%", template.getName());
@@ -299,6 +340,13 @@ public class WizardStep4ConfirmGui extends CustomGuiHolder {
                 context.getPlugin().getConfigManager().send(player, "save-failed");
                 context.getPlugin().getConfigManager().playSound(player, "error");
             }
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

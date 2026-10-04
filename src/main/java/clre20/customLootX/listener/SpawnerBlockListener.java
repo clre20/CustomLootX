@@ -52,6 +52,14 @@ public class SpawnerBlockListener implements Listener {
 
         Player player = event.getPlayer();
 
+        // 0. 若為未儲存草稿物品，禁止放置
+        if (plugin.getItemManager().isDraftItem(item)) {
+            event.setCancelled(true);
+            plugin.getConfigManager().send(player, "cannot-place-draft");
+            plugin.getConfigManager().playSound(player, "error");
+            return;
+        }
+
         // 1. 若為空白未設定物品，禁止放置
         if (plugin.getItemManager().isBlankSpawnerItem(item)) {
             event.setCancelled(true);
@@ -164,6 +172,12 @@ public class SpawnerBlockListener implements Listener {
                 openSpawnerWizard(player, held);
                 return;
             } else if (action == Action.RIGHT_CLICK_BLOCK) {
+                if (plugin.getItemManager().isDraftItem(held)) {
+                    event.setCancelled(true);
+                    plugin.getConfigManager().send(player, "cannot-place-draft");
+                    plugin.getConfigManager().playSound(player, "error");
+                    return;
+                }
                 if (plugin.getItemManager().isBlankSpawnerItem(held)) {
                     event.setCancelled(true);
                     plugin.getConfigManager().send(player, "empty-block-warning");
@@ -249,6 +263,64 @@ public class SpawnerBlockListener implements Listener {
     }
 
     private void openSpawnerWizard(Player player, ItemStack item) {
+        // 檢查手持物品是否為草稿
+        if (plugin.getItemManager().isDraftItem(item)) {
+            if (plugin.getItemManager().isDraftExpired(item)) {
+                plugin.getItemManager().markDraftExpired(item);
+                plugin.getConfigManager().send(player, "draft-expired-reverted");
+                plugin.getConfigManager().playSound(player, "error");
+                plugin.getItemManager().removeDraft(item);
+
+                String origName = plugin.getItemManager().getDraftOriginalName(item);
+                if (origName != null && plugin.getSpawnerTemplateManager().getTemplate(origName) != null) {
+                    SpawnerTemplate orig = plugin.getSpawnerTemplateManager().getTemplate(origName);
+                    ItemStack configured = plugin.getItemManager().createTemplateSpawnerItem(orig, item.getAmount());
+                    player.getInventory().setItemInMainHand(configured);
+                    SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, orig.cloneTemplate(), configured, true);
+                    new SpawnerWizardStep1Gui(context).open();
+                } else {
+                    ItemStack blank = plugin.getItemManager().createBlankSpawnerItem(false);
+                    player.getInventory().setItemInMainHand(blank);
+                    SpawnerTemplate st = new SpawnerTemplate("<未設定>", false, "<未設定>", org.bukkit.entity.EntityType.ZOMBIE, 6, 2, 3, 14, clre20.customLootX.model.VaultCooldownMode.PLAYER_COOLDOWN, 15, 3, new java.util.ArrayList<>());
+                    SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, st, blank, false);
+                    new SpawnerWizardStep1Gui(context).open();
+                }
+                return;
+            }
+
+            String draftId = plugin.getItemManager().getDraftId(item);
+            clre20.customLootX.model.DraftSession session = plugin.getDraftManager().loadDraft(clre20.customLootX.model.DraftType.SPAWNER, draftId);
+            if (session == null || !(session.getTemplateData() instanceof SpawnerTemplate st)) {
+                plugin.getItemManager().markDraftExpired(item);
+                plugin.getConfigManager().send(player, "draft-expired-reverted");
+                plugin.getConfigManager().playSound(player, "error");
+                plugin.getItemManager().removeDraft(item);
+
+                String origName = plugin.getItemManager().getDraftOriginalName(item);
+                if (origName != null && plugin.getSpawnerTemplateManager().getTemplate(origName) != null) {
+                    SpawnerTemplate orig = plugin.getSpawnerTemplateManager().getTemplate(origName);
+                    ItemStack configured = plugin.getItemManager().createTemplateSpawnerItem(orig, item.getAmount());
+                    player.getInventory().setItemInMainHand(configured);
+                    SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, orig.cloneTemplate(), configured, true);
+                    new SpawnerWizardStep1Gui(context).open();
+                } else {
+                    ItemStack blank = plugin.getItemManager().createBlankSpawnerItem(false);
+                    player.getInventory().setItemInMainHand(blank);
+                    SpawnerTemplate nst = new SpawnerTemplate("<未設定>", false, "<未設定>", org.bukkit.entity.EntityType.ZOMBIE, 6, 2, 3, 14, clre20.customLootX.model.VaultCooldownMode.PLAYER_COOLDOWN, 15, 3, new java.util.ArrayList<>());
+                    SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, nst, blank, false);
+                    new SpawnerWizardStep1Gui(context).open();
+                }
+                return;
+            }
+
+            boolean isExisting = session.getOriginalName() != null;
+            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, st, item, isExisting, draftId, true);
+            plugin.getConfigManager().playSound(player, "click");
+            plugin.getConfigManager().send(player, "draft-loaded");
+            new SpawnerWizardStep1Gui(context).open();
+            return;
+        }
+
         boolean isBlank = plugin.getItemManager().isBlankSpawnerItem(item);
         SpawnerTemplate template;
 

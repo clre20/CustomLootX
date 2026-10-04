@@ -302,37 +302,60 @@ public class SpawnerVanillaMobSelectGui extends CustomGuiHolder {
                 context.getTemplate().getMobPool().add(new SpawnerMobEntry(opt.type(), defaultChance));
                 context.getPlugin().getConfigManager().playSound(player, "success");
                 player.sendMessage(TextUtil.parse("&a[CustomLootX] 已成功將 &e" + opt.name() + " &a加入生怪磚生成池！"));
+                context.setTransitioning(true);
                 new SpawnerWizardStep2MobGui(context, 1).open();
+                context.setTransitioning(false);
             }
         } else if (slot == 45) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerWizardStep2MobGui(context, 1).open();
+            context.setTransitioning(false);
         } else if (slot == 46) {
             if (category != MobCategory.ALL) {
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerVanillaMobSelectGui(context, MobCategory.ALL, 1).open();
+                context.setTransitioning(false);
             }
         } else if (slot == 47) {
             if (category != MobCategory.HOSTILE) {
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerVanillaMobSelectGui(context, MobCategory.HOSTILE, 1).open();
+                context.setTransitioning(false);
             }
         } else if (slot == 48) {
             if (category != MobCategory.NEUTRAL) {
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerVanillaMobSelectGui(context, MobCategory.NEUTRAL, 1).open();
+                context.setTransitioning(false);
             }
         } else if (slot == 49) {
             if (category != MobCategory.PASSIVE) {
                 context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
                 new SpawnerVanillaMobSelectGui(context, MobCategory.PASSIVE, 1).open();
+                context.setTransitioning(false);
             }
         } else if (slot == 50 && page > 1) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerVanillaMobSelectGui(context, category, page - 1).open();
+            context.setTransitioning(false);
         } else if (slot == 52 && page < totalPages) {
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new SpawnerVanillaMobSelectGui(context, category, page + 1).open();
+            context.setTransitioning(false);
+        }
+    }
+
+    @Override
+    public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            context.saveAsDraft();
         }
     }
 }

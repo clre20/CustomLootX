@@ -308,20 +308,27 @@ public class VaultKeySetupGui extends CustomGuiHolder {
         if (rawSlot == 11) {
             // 設定鑰匙名稱
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             context.getPlugin().getChatInputManager().requestInput(
                     player,
                     context.getPlugin().getConfigManager().getRawMessage("key-name-prompt"),
                     input -> {
+                        context.setTransitioning(false);
                         this.customKeyName = input.trim();
                         context.getPlugin().getConfigManager().playSound(player, "success");
                         open();
                     },
-                    this::open
+                    () -> {
+                        context.setTransitioning(false);
+                        open();
+                    }
             );
         } else if (rawSlot == 12) {
             // 開啟說明 (Lore) 管理介面
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultKeyLoreGui(this).open();
+            context.setTransitioning(false);
         } else if (rawSlot == 14) {
             // 重置為原版預設鑰匙
             if (isPlayerPlacedItem && currentKeyItem != null) {
@@ -349,7 +356,9 @@ public class VaultKeySetupGui extends CustomGuiHolder {
                 isPlayerPlacedItem = false;
             }
             context.getPlugin().getConfigManager().playSound(player, "click");
+            context.setTransitioning(true);
             new VaultWizardStep1Gui(context).open();
+            context.setTransitioning(false);
         } else if (rawSlot == 26) {
             // 下一步 (前往步驟三：冷卻機制與出貨數量)
             if (currentKeyItem == null || currentKeyItem.getType().isAir()) {
@@ -370,7 +379,9 @@ public class VaultKeySetupGui extends CustomGuiHolder {
             }
 
             context.getPlugin().getConfigManager().playSound(player, "success");
+            context.setTransitioning(true);
             new VaultWizardStep3CooldownGui(context).open();
+            context.setTransitioning(false);
         }
     }
 
@@ -383,6 +394,13 @@ public class VaultKeySetupGui extends CustomGuiHolder {
                     player.getWorld().dropItemNaturally(player.getLocation(), drop)
             );
             isPlayerPlacedItem = false;
+        }
+
+        if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
+            if (currentKeyItem != null && !currentKeyItem.getType().isAir()) {
+                context.getTemplate().setKeyItem(buildFinalCraftedKey());
+            }
+            context.saveAsDraft();
         }
     }
 }
