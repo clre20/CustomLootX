@@ -451,12 +451,15 @@ public class SpawnerBattleSession {
                     }
                 }
                 if (visualData != null && world != null) {
-                    for (Player p : world.getNearbyPlayers(spawnerLocation, 64)) {
-                        p.sendBlockChange(spawnerLocation, visualData);
+                    java.util.Collection<Player> nearby = world.getNearbyPlayers(spawnerLocation, 48);
+                    if (!nearby.isEmpty()) {
+                        for (Player p : nearby) {
+                            p.sendBlockChange(spawnerLocation, visualData);
+                        }
                     }
                 }
             }
-        }.runTaskTimer(plugin, 1L, 2L);
+        }.runTaskTimer(plugin, 1L, 6L);
 
         // 抽取獎勵物品
         List<ItemStack> rewards = template.rollAllItems();

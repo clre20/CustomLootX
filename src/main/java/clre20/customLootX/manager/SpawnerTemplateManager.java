@@ -48,6 +48,8 @@ public class SpawnerTemplateManager {
     private final Map<String, Set<UUID>> rewardedPlayers = new ConcurrentHashMap<>();
     // 4. 已放置生怪磚追蹤：locationKey -> templateName
     private final Map<String, String> placedSpawners = new ConcurrentHashMap<>();
+    // 快取解析後的 Location，避免每秒心跳重複分割字串與配置 Location 物件
+    private final Map<String, Location> locationCache = new ConcurrentHashMap<>();
     // 5. 進行中的戰鬥進程：locationKey -> SpawnerBattleSession
     private final Map<String, SpawnerBattleSession> activeBattles = new ConcurrentHashMap<>();
 
@@ -462,6 +464,7 @@ public class SpawnerTemplateManager {
     public void registerSpawner(Location loc, String templateName) {
         if (loc == null || templateName == null) return;
         String key = toLocationKey(loc);
+        locationCache.put(key, loc.clone());
         placedSpawners.put(key, templateName);
         saveRuntimeData();
     }
@@ -469,6 +472,7 @@ public class SpawnerTemplateManager {
     public void unregisterSpawner(Location loc) {
         if (loc == null) return;
         String key = toLocationKey(loc);
+        locationCache.remove(key);
         cancelBattleSession(key);
         placedSpawners.remove(key);
         saveRuntimeData();
@@ -476,6 +480,9 @@ public class SpawnerTemplateManager {
 
     public Location parseLocation(String locKey) {
         if (locKey == null || locKey.isEmpty()) return null;
+        Location cached = locationCache.get(locKey);
+        if (cached != null) return cached;
+
         String[] parts = locKey.split(":");
         if (parts.length != 4) return null;
         World world = Bukkit.getWorld(parts[0]);
@@ -484,7 +491,9 @@ public class SpawnerTemplateManager {
             int x = Integer.parseInt(parts[1]);
             int y = Integer.parseInt(parts[2]);
             int z = Integer.parseInt(parts[3]);
-            return new Location(world, x, y, z);
+            Location loc = new Location(world, x, y, z);
+            locationCache.put(locKey, loc);
+            return loc;
         } catch (NumberFormatException e) {
             return null;
         }
@@ -705,6 +714,11 @@ public class SpawnerTemplateManager {
                 continue;
             }
 
+            // 視野守衛 (View Guard): 若周圍 48 格內無任何玩家，不執行方塊狀態維護，大幅節省伺服器算力
+            if (loc.getWorld().getNearbyPlayers(loc, 48).isEmpty()) {
+                continue;
+            }
+
             Block block = loc.getBlock();
             if (block.getType() != Material.TRIAL_SPAWNER) continue;
 
@@ -732,7 +746,8 @@ public class SpawnerTemplateManager {
                 }
 
                 // 核心防護 2：TileState 不祥屬性、冷卻時間與清空原版追蹤玩家 (防止靠近偽觸發)
-                if (block.getState() instanceof TrialSpawner ts) {
+                // 使用 Paper block.getState(false) 避免深層 NBT 快照複製，降低 GC 負擔
+                if (block.getState(false) instanceof TrialSpawner ts) {
                     boolean stateChanged = false;
 
                     if (ts.isOminous() != template.isOminous()) {
@@ -790,6 +805,11 @@ public class SpawnerTemplateManager {
                 continue;
             }
 
+            // 視距守衛 (View Guard)：周圍 48 格內無任何在線玩家時直接略過，避免無效的 NMS 反射更新與封包負載
+            if (loc.getWorld().getNearbyPlayers(loc, 48).isEmpty()) {
+                continue;
+            }
+
             Block block = loc.getBlock();
             if (block.getType() != Material.TRIAL_SPAWNER) continue;
 
@@ -803,6 +823,7 @@ public class SpawnerTemplateManager {
     }
 
     private void tickPlayerDetection() {
+        long now = System.currentTimeMillis();
         for (Map.Entry<String, String> entry : placedSpawners.entrySet()) {
             String locKey = entry.getKey();
             if (activeBattles.containsKey(locKey)) {
@@ -812,29 +833,30 @@ public class SpawnerTemplateManager {
             SpawnerTemplate template = getTemplate(entry.getValue());
             if (template == null) continue;
 
+            // 全域冷卻前置過濾：若在冷卻中直接跳過，完全避免解析 Location 與 Chunk 檢查
+            if (template.getCooldownMode() == VaultCooldownMode.GLOBAL_COOLDOWN) {
+                Long expire = globalCooldowns.get(locKey);
+                if (expire != null && expire > now) {
+                    continue; // 仍在全域冷卻中
+                }
+            }
+
             Location loc = parseLocation(locKey);
             if (loc == null || loc.getWorld() == null || !loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
                 continue;
             }
 
-            // 檢查全域冷卻
-            if (template.getCooldownMode() == VaultCooldownMode.GLOBAL_COOLDOWN) {
-                Long expire = globalCooldowns.get(locKey);
-                if (expire != null && expire > System.currentTimeMillis()) {
-                    continue; // 仍在全域冷卻中
-                }
-            }
-
-            // 搜尋感應範圍內的合格玩家
-            double rangeSq = Math.pow(template.getPlayerRange(), 2);
+            // 空間索引搜尋感應範圍內的合格玩家 (避免遍歷世界所有無關玩家)
+            double range = template.getPlayerRange();
+            double rangeSq = range * range;
             List<Player> eligiblePlayers = new ArrayList<>();
 
-            for (Player p : loc.getWorld().getPlayers()) {
+            for (Player p : loc.getWorld().getNearbyPlayers(loc, range)) {
                 if (p.isDead() || !p.isValid()) continue;
                 GameMode gm = p.getGameMode();
                 if (gm != GameMode.SURVIVAL && gm != GameMode.ADVENTURE) continue;
 
-                if (p.getWorld().equals(loc.getWorld()) && p.getLocation().distanceSquared(loc) <= rangeSq) {
+                if (p.getLocation().distanceSquared(loc) <= rangeSq) {
                     // 檢查玩家冷卻資格
                     if (checkCooldownStatus(loc, p.getUniqueId(), template) == 0) {
                         eligiblePlayers.add(p);
@@ -999,6 +1021,10 @@ public class SpawnerTemplateManager {
     }
 
     public void saveRuntimeData() {
+        saveRuntimeData(false);
+    }
+
+    public void saveRuntimeData(boolean sync) {
         YamlConfiguration yaml = new YamlConfiguration();
 
         // 儲存已放置生怪磚
@@ -1032,10 +1058,21 @@ public class SpawnerTemplateManager {
             yaml.set("rewarded_players." + entry.getKey(), list);
         }
 
-        try {
-            yaml.save(runtimeFile);
-        } catch (IOException e) {
-            plugin.logWarn("&5[試煉生怪磚·資料]&c 儲存試煉生怪磚運行期資料失敗: " + e.getMessage());
+        // 運行期間使用非同步執行緒寫入檔案，徹底避免伺服器主執行緒因硬碟 I/O 阻塞造成 TPS 波動
+        if (sync || !plugin.isEnabled()) {
+            try {
+                yaml.save(runtimeFile);
+            } catch (IOException e) {
+                plugin.logWarn("&5[試煉生怪磚·資料]&c 儲存試煉生怪磚運行期資料失敗: " + e.getMessage());
+            }
+        } else {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    yaml.save(runtimeFile);
+                } catch (IOException e) {
+                    plugin.logWarn("&5[試煉生怪磚·資料]&c 儲存試煉生怪磚運行期資料失敗: " + e.getMessage());
+                }
+            });
         }
     }
 }

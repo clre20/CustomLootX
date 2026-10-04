@@ -195,6 +195,11 @@ public class ItemManager {
 
     public boolean isCustomLootItem(ItemStack item) {
         if (item == null || item.getType() == Material.AIR) return false;
+        Material mat = item.getType();
+        if (mat != Material.SUSPICIOUS_SAND && mat != Material.SUSPICIOUS_GRAVEL) {
+            return false;
+        }
+        if (!item.hasItemMeta()) return false;
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return false;
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
@@ -748,7 +753,12 @@ public class ItemManager {
     // ==========================================
 
     public boolean isDraftItem(ItemStack item) {
-        if (item == null || !item.hasItemMeta()) return false;
+        if (item == null || item.getType() == Material.AIR) return false;
+        Material mat = item.getType();
+        if (mat != Material.SUSPICIOUS_SAND && mat != Material.SUSPICIOUS_GRAVEL && mat != Material.VAULT && mat != Material.TRIAL_SPAWNER) {
+            return false;
+        }
+        if (!item.hasItemMeta()) return false;
         return item.getItemMeta().getPersistentDataContainer().has(KEY_IS_DRAFT, PersistentDataType.BYTE);
     }
 

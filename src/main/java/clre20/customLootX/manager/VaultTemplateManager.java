@@ -40,6 +40,8 @@ public class VaultTemplateManager {
     private final Map<String, Set<UUID>> rewardedPlayers = new ConcurrentHashMap<>();
     // 4. 已放置寶庫追蹤：locationKey -> templateName
     private final Map<String, String> placedVaults = new ConcurrentHashMap<>();
+    // 快取解析後的 Location，避免每秒心跳重複分割字串與配置 Location 物件
+    private final Map<String, Location> locationCache = new ConcurrentHashMap<>();
     // 5. 正在開獎噴發戰利品中的寶庫：locationKey
     private final Set<String> ejectingVaults = ConcurrentHashMap.newKeySet();
     private BukkitTask tickerTask;
@@ -317,6 +319,7 @@ public class VaultTemplateManager {
     public void registerVault(Location loc, String templateName) {
         if (loc == null || templateName == null) return;
         String key = toLocationKey(loc);
+        locationCache.put(key, loc.clone());
         placedVaults.put(key, templateName);
         saveRuntimeData();
     }
@@ -324,12 +327,16 @@ public class VaultTemplateManager {
     public void unregisterVault(Location loc) {
         if (loc == null) return;
         String key = toLocationKey(loc);
+        locationCache.remove(key);
         placedVaults.remove(key);
         saveRuntimeData();
     }
 
     public Location parseLocation(String locKey) {
         if (locKey == null || locKey.isEmpty()) return null;
+        Location cached = locationCache.get(locKey);
+        if (cached != null) return cached;
+
         String[] parts = locKey.split(":");
         if (parts.length != 4) return null;
         World world = Bukkit.getWorld(parts[0]);
@@ -338,7 +345,9 @@ public class VaultTemplateManager {
             int x = Integer.parseInt(parts[1]);
             int y = Integer.parseInt(parts[2]);
             int z = Integer.parseInt(parts[3]);
-            return new Location(world, x, y, z);
+            Location loc = new Location(world, x, y, z);
+            locationCache.put(locKey, loc);
+            return loc;
         } catch (NumberFormatException e) {
             return null;
         }
@@ -575,6 +584,11 @@ public class VaultTemplateManager {
                 continue;
             }
 
+            // 視距守衛：48 格內無任何在線玩家時直接略過，避免無謂的 BlockData 與 TileState 操作
+            if (loc.getWorld().getNearbyPlayers(loc, 48).isEmpty()) {
+                continue;
+            }
+
             Block block = loc.getBlock();
             if (block.getType() != Material.VAULT) continue;
 
@@ -597,7 +611,8 @@ public class VaultTemplateManager {
                 }
             }
 
-            if (block.getState() instanceof Vault vs) {
+            // 使用 Paper block.getState(false) 避免產生沈重的 TileEntity 記憶體快照 (GC 優化)
+            if (block.getState(false) instanceof Vault vs) {
                 boolean stateChanged = false;
                 if (inGlobalCd) {
                     if (vs.getActivationRange() != 0.0) {
@@ -636,6 +651,10 @@ public class VaultTemplateManager {
     // ==========================================
 
     public void saveRuntimeData() {
+        saveRuntimeData(false);
+    }
+
+    public void saveRuntimeData(boolean sync) {
         YamlConfiguration yaml = new YamlConfiguration();
         long now = System.currentTimeMillis();
 
@@ -667,9 +686,18 @@ public class VaultTemplateManager {
             yaml.set("placed." + entry.getKey(), entry.getValue());
         }
 
-        try {
-            yaml.save(runtimeFile);
-        } catch (IOException ignored) {}
+        // 運行期間使用非同步執行緒寫入檔案，徹底避免伺服器主執行緒因硬碟 I/O 阻塞造成 TPS 波動
+        if (sync || !plugin.isEnabled()) {
+            try {
+                yaml.save(runtimeFile);
+            } catch (IOException ignored) {}
+        } else {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    yaml.save(runtimeFile);
+                } catch (IOException ignored) {}
+            });
+        }
     }
 
     public void loadRuntimeData() {

@@ -93,11 +93,11 @@ public final class CustomLootX extends JavaPlugin {
         }
         if (vaultTemplateManager != null) {
             vaultTemplateManager.stopTicker();
-            vaultTemplateManager.saveRuntimeData();
+            vaultTemplateManager.saveRuntimeData(true);
         }
         if (spawnerTemplateManager != null) {
             spawnerTemplateManager.stopTicker();
-            spawnerTemplateManager.saveRuntimeData();
+            spawnerTemplateManager.saveRuntimeData(true);
         }
         logConsole("&c✘ CustomLootX 插件已關閉");
     }

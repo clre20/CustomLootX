@@ -18,10 +18,32 @@ public class DraftManager {
     private final CustomLootX plugin;
     private final File baseDraftsDir;
 
+    private final Set<String> activeDraftKeys = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     public DraftManager(CustomLootX plugin) {
         this.plugin = plugin;
         this.baseDraftsDir = new File(plugin.getDataFolder(), "drafts");
         ensureDirectories();
+        refreshActiveDrafts();
+    }
+
+    private String toDraftKey(DraftType type, String draftId) {
+        if (type == null || draftId == null) return "";
+        return type.name() + ":" + draftId.trim().toLowerCase();
+    }
+
+    public void refreshActiveDrafts() {
+        activeDraftKeys.clear();
+        for (DraftType type : DraftType.values()) {
+            File dir = getDraftDir(type);
+            if (!dir.exists()) continue;
+            File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
+            if (files == null) continue;
+            for (File file : files) {
+                String draftId = file.getName().substring(0, file.getName().length() - 4);
+                activeDraftKeys.add(toDraftKey(type, draftId));
+            }
+        }
     }
 
     private void ensureDirectories() {
@@ -89,6 +111,7 @@ public class DraftManager {
 
         try {
             yaml.save(file);
+            activeDraftKeys.add(toDraftKey(type, draftId));
             return new DraftSession(draftId, type, originalName, now, expireTime, templateData);
         } catch (IOException e) {
             plugin.logError("&c[草稿·儲存]&c 儲存草稿檔案失敗: " + e.getMessage());
@@ -125,12 +148,11 @@ public class DraftManager {
     }
 
     /**
-     * 檢查草稿檔案是否存在
+     * 檢查草稿檔案是否存在 (純記憶體快速比對，零硬碟 I/O)
      */
     public boolean hasDraft(DraftType type, String draftId) {
         if (type == null || draftId == null || draftId.trim().isEmpty()) return false;
-        File file = new File(getDraftDir(type), draftId + ".yml");
-        return file.exists();
+        return activeDraftKeys.contains(toDraftKey(type, draftId));
     }
 
     /**
@@ -176,6 +198,7 @@ public class DraftManager {
             DraftSession session = loadDraft(type, draftId);
             if (session != null && originalName.equalsIgnoreCase(session.getOriginalName())) {
                 if (file.delete()) {
+                    activeDraftKeys.remove(toDraftKey(type, draftId));
                     deleted = true;
                 }
             }
@@ -188,6 +211,7 @@ public class DraftManager {
      */
     public boolean deleteDraft(DraftType type, String draftId) {
         if (type == null || draftId == null || draftId.trim().isEmpty()) return false;
+        activeDraftKeys.remove(toDraftKey(type, draftId));
         File file = new File(getDraftDir(type), draftId + ".yml");
         if (file.exists()) {
             return file.delete();
@@ -213,7 +237,9 @@ public class DraftManager {
                     YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
                     long expire = yaml.getLong("draft.expire-time", 0);
                     if (expire > 0 && now > expire) {
+                        String draftId = file.getName().substring(0, file.getName().length() - 4);
                         if (file.delete()) {
+                            activeDraftKeys.remove(toDraftKey(type, draftId));
                             cleaned++;
                         }
                     }

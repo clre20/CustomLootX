@@ -320,7 +320,7 @@ public class VaultBlockListener implements Listener {
                         p.sendBlockChange(loc, ejectingVisualData);
                     }
 
-                    // 持續視覺守衛：在吐物期間從第 1 tick 開始每 2 ticks 維持狀態，確保多玩家及靠近者始終看到平滑開啟的百葉窗
+                    // 持續視覺守衛：在吐物期間每 6 ticks 維持狀態，大幅降低封包與運算負擔，同時確保多玩家看到平滑開啟的百葉窗
                     org.bukkit.scheduler.BukkitTask visualKeeper = new BukkitRunnable() {
                         @Override
                         public void run() {
@@ -334,11 +334,14 @@ public class VaultBlockListener implements Listener {
                                     block.setBlockData(vd, false);
                                 }
                             }
-                            for (Player p : loc.getWorld().getNearbyPlayers(loc, 64)) {
-                                p.sendBlockChange(loc, ejectingVisualData);
+                            java.util.Collection<Player> nearby = loc.getWorld().getNearbyPlayers(loc, 48);
+                            if (!nearby.isEmpty()) {
+                                for (Player p : nearby) {
+                                    p.sendBlockChange(loc, ejectingVisualData);
+                                }
                             }
                         }
-                    }.runTaskTimer(plugin, 1L, 2L);
+                    }.runTaskTimer(plugin, 1L, 6L);
 
                     for (int i = 0; i < totalItems; i++) {
                         ItemStack reward = rewards.get(i);

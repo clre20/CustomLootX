@@ -48,11 +48,30 @@ public class DraftItemListener implements Listener {
         }
     }
 
+    private static boolean isPotentialDraftMaterial(org.bukkit.Material type) {
+        if (type == null) return false;
+        return type == org.bukkit.Material.SUSPICIOUS_SAND
+                || type == org.bukkit.Material.SUSPICIOUS_GRAVEL
+                || type == org.bukkit.Material.VAULT
+                || type == org.bukkit.Material.TRIAL_SPAWNER;
+    }
+
     /**
      * 檢查草稿物品狀態，若逾期且尚未標記過期，自動刷新為過期狀態提示
      */
     private void checkAndRefreshDraftItem(ItemStack item) {
-        if (item == null || !plugin.getItemManager().isDraftItem(item)) {
+        if (item == null || item.getType().isAir()) {
+            return;
+        }
+        // 1. 材質快速過濾 (Fast-fail)：99.9% 的玩家背包物品非自訂方塊材質，直接跳過，完全不觸發任何 Meta / NBT 反序列化
+        if (!isPotentialDraftMaterial(item.getType())) {
+            return;
+        }
+        // 2. 原版底層無任何 tag/meta 時快速跳過，避免建立 CraftMetaItem 暫存物件
+        if (!item.hasItemMeta()) {
+            return;
+        }
+        if (!plugin.getItemManager().isDraftItem(item)) {
             return;
         }
 
@@ -63,7 +82,7 @@ public class DraftItemListener implements Listener {
 
         boolean expired = plugin.getItemManager().isDraftExpired(item);
         if (!expired) {
-            // 亦檢查對應草稿檔案是否在硬碟中已被巡檢清理或遺失
+            // 亦檢查對應草稿檔案是否已被清理或遺失 (純記憶體比對)
             String draftId = plugin.getItemManager().getDraftId(item);
             DraftType draftType = plugin.getItemManager().getDraftType(item);
             if (draftId != null && draftType != null && !plugin.getDraftManager().hasDraft(draftType, draftId)) {

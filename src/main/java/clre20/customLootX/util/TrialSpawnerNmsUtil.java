@@ -53,6 +53,7 @@ public class TrialSpawnerNmsUtil {
     private static Method craftPlayerGetHandleMethod;
     private static Field connectionField;
     private static Method sendPacketMethod;
+    private static BlockData barrierData;
 
     public static synchronized void init(Logger logger) {
         if (initialized) return;
@@ -237,23 +238,28 @@ public class TrialSpawnerNmsUtil {
             // 由於在同一個 tick 發送，客戶端在下一次繪製畫面時已是新生物，完全不會有屏障閃爍。
             Location loc = block.getLocation();
             if (loc.getWorld() != null) {
-                if (updatePacket != null) {
-                    BlockData barrierData = Material.BARRIER.createBlockData();
-                    BlockData realBlockData = block.getBlockData();
+                java.util.Collection<Player> nearby = loc.getWorld().getNearbyPlayers(loc, 64);
+                if (!nearby.isEmpty()) {
+                    if (updatePacket != null) {
+                        if (barrierData == null) {
+                            barrierData = Material.BARRIER.createBlockData();
+                        }
+                        BlockData realBlockData = block.getBlockData();
 
-                    for (Player p : loc.getWorld().getNearbyPlayers(loc, 64)) {
-                        try {
-                            p.sendBlockChange(loc, barrierData);
-                            p.sendBlockChange(loc, realBlockData);
-                            sendNmsPacket(p, updatePacket);
-                        } catch (Throwable ignored) {}
-                    }
-                } else if (ts != null) {
-                    // Fallback
-                    for (Player p : loc.getWorld().getNearbyPlayers(loc, 64)) {
-                        try {
-                            p.sendBlockUpdate(loc, ts);
-                        } catch (Throwable ignored) {}
+                        for (Player p : nearby) {
+                            try {
+                                p.sendBlockChange(loc, barrierData);
+                                p.sendBlockChange(loc, realBlockData);
+                                sendNmsPacket(p, updatePacket);
+                            } catch (Throwable ignored) {}
+                        }
+                    } else if (ts != null) {
+                        // Fallback
+                        for (Player p : nearby) {
+                            try {
+                                p.sendBlockUpdate(loc, ts);
+                            } catch (Throwable ignored) {}
+                        }
                     }
                 }
             }
