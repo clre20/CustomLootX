@@ -37,6 +37,8 @@ public class TrialSpawnerNmsUtil {
 
     // TrialSpawner
     private static Method getStateDataMethod;
+    private static Method setPlayerDetectorMethod;
+    private static Object emptyPlayerDetector;
 
     // TrialSpawnerStateData
     private static Field nextSpawnDataField;
@@ -83,6 +85,15 @@ public class TrialSpawnerNmsUtil {
             // 4. TrialSpawner
             Class<?> trialSpawnerClass = Class.forName("net.minecraft.world.level.block.entity.trialspawner.TrialSpawner");
             getStateDataMethod = trialSpawnerClass.getMethod("getStateData");
+            try {
+                Class<?> playerDetectorClass = Class.forName("net.minecraft.world.level.block.entity.trialspawner.PlayerDetector");
+                setPlayerDetectorMethod = trialSpawnerClass.getMethod("setPlayerDetector", playerDetectorClass);
+                emptyPlayerDetector = java.lang.reflect.Proxy.newProxyInstance(
+                        playerDetectorClass.getClassLoader(),
+                        new Class<?>[]{playerDetectorClass},
+                        (proxy, method, args) -> java.util.Collections.emptyList()
+                );
+            } catch (Throwable ignored) {}
 
             // 5. TrialSpawnerStateData
             Class<?> stateDataClass = Class.forName("net.minecraft.world.level.block.entity.trialspawner.TrialSpawnerStateData");
@@ -160,7 +171,6 @@ public class TrialSpawnerNmsUtil {
             if (state instanceof TrialSpawner) {
                 ts = (TrialSpawner) state;
                 ts.setOminous(ominous);
-                ts.setRequiredPlayerRange(0);
                 try {
                     ts.getNormalConfiguration().setSpawnedType(targetType);
                     ts.getOminousConfiguration().setSpawnedType(targetType);
@@ -190,6 +200,11 @@ public class TrialSpawnerNmsUtil {
             if (realBlockEntity != null && getTrialSpawnerMethod != null && getStateDataMethod != null && nextSpawnDataField != null) {
                 try {
                     Object trialSpawner = getTrialSpawnerMethod.invoke(realBlockEntity);
+                    if (trialSpawner != null && setPlayerDetectorMethod != null && emptyPlayerDetector != null) {
+                        try {
+                            setPlayerDetectorMethod.invoke(trialSpawner, emptyPlayerDetector);
+                        } catch (Throwable ignored) {}
+                    }
                     Object stateData = getStateDataMethod.invoke(trialSpawner);
 
                     // 建立 CompoundTag 並寫入 entity id: "minecraft:..."
@@ -270,5 +285,27 @@ public class TrialSpawnerNmsUtil {
             org.bukkit.Bukkit.getConsoleSender().sendMessage(clre20.customLootX.util.TextUtil.parse("&8[&6CustomLootX&8] &5[試煉生怪磚·預覽]&c 更新試煉生怪磚預覽實體失敗: " + t.getMessage()));
             return false;
         }
+    }
+
+    /**
+     * 徹底為該生怪磚注入空 PlayerDetector，遮斷原版偵測玩家的不祥之兆/試煉預兆
+     */
+    public static void disablePlayerDetector(Block block, Logger logger) {
+        if (block == null || block.getType() != Material.TRIAL_SPAWNER) return;
+        if (!initialized) init(logger);
+        try {
+            Object realBlockEntity = null;
+            if (craftWorldGetHandleMethod != null && blockPosConstructor != null && levelGetBlockEntityMethod != null) {
+                Object level = craftWorldGetHandleMethod.invoke(block.getWorld());
+                Object blockPos = blockPosConstructor.newInstance(block.getX(), block.getY(), block.getZ());
+                realBlockEntity = levelGetBlockEntityMethod.invoke(level, blockPos);
+            }
+            if (realBlockEntity != null && getTrialSpawnerMethod != null && setPlayerDetectorMethod != null && emptyPlayerDetector != null) {
+                Object trialSpawner = getTrialSpawnerMethod.invoke(realBlockEntity);
+                if (trialSpawner != null) {
+                    setPlayerDetectorMethod.invoke(trialSpawner, emptyPlayerDetector);
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 }

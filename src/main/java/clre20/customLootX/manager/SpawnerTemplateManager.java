@@ -21,6 +21,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -553,8 +554,7 @@ public class SpawnerTemplateManager {
         // 2. 同步 TileState (3D 旋轉實體預覽模型、感應範圍、冷卻時間與 PDC)
         if (block.getState() instanceof TrialSpawner tsState) {
             tsState.setOminous(template.isOminous());
-            // 核心免疫防護：徹底鎖定原版原生感應距離為 0，遮斷原版原生物理感應，避免玩家攜帶不祥之兆/試煉預兆時原版強行轉化為不祥樣式造成藍/橘外觀反覆跳動閃爍！
-            tsState.setRequiredPlayerRange(0);
+            tsState.setRequiredPlayerRange(template.getPlayerRange());
 
             if (inCooldown) {
                 long cdTicks = Math.max(20L, cdSeconds * 20L);
@@ -720,12 +720,23 @@ public class SpawnerTemplateManager {
             }
 
             // 視野守衛 (View Guard): 若周圍 48 格內無任何玩家，不執行方塊狀態維護，大幅節省伺服器算力
-            if (loc.getWorld().getNearbyPlayers(loc, 48).isEmpty()) {
+            List<Player> nearbyGuardPlayers = new ArrayList<>(loc.getWorld().getNearbyPlayers(loc, 48));
+            if (nearbyGuardPlayers.isEmpty()) {
                 continue;
+            }
+
+            // 自動淨化周圍玩家的不祥之兆與試煉預兆，徹底杜絕外觀受不祥藥水干擾
+            for (Player p : nearbyGuardPlayers) {
+                if (p.hasPotionEffect(PotionEffectType.BAD_OMEN)) p.removePotionEffect(PotionEffectType.BAD_OMEN);
+                if (p.hasPotionEffect(PotionEffectType.TRIAL_OMEN)) p.removePotionEffect(PotionEffectType.TRIAL_OMEN);
+                if (p.hasPotionEffect(PotionEffectType.RAID_OMEN)) p.removePotionEffect(PotionEffectType.RAID_OMEN);
             }
 
             Block block = loc.getBlock();
             if (block.getType() != Material.TRIAL_SPAWNER) continue;
+
+            // 確保注入空 PlayerDetector 遮斷原版偵測
+            TrialSpawnerNmsUtil.disablePlayerDetector(block, plugin.getLogger());
 
             boolean inCd = isSpawnerInCooldown(locKey, template);
             if (block.getBlockData() instanceof org.bukkit.block.data.type.TrialSpawner data) {
@@ -757,12 +768,6 @@ public class SpawnerTemplateManager {
 
                     if (ts.isOminous() != template.isOminous()) {
                         ts.setOminous(template.isOminous());
-                        stateChanged = true;
-                    }
-
-                    // 核心免疫防護：強制維持原版原生感應距離為 0，徹底杜絕外觀閃爍
-                    if (ts.getRequiredPlayerRange() != 0) {
-                        ts.setRequiredPlayerRange(0);
                         stateChanged = true;
                     }
 
@@ -866,6 +871,12 @@ public class SpawnerTemplateManager {
                 if (p.isDead() || !p.isValid()) continue;
                 GameMode gm = p.getGameMode();
                 if (gm != GameMode.SURVIVAL && gm != GameMode.ADVENTURE) continue;
+
+                if (!template.isOminous()) {
+                    if (p.hasPotionEffect(PotionEffectType.BAD_OMEN)) p.removePotionEffect(PotionEffectType.BAD_OMEN);
+                    if (p.hasPotionEffect(PotionEffectType.TRIAL_OMEN)) p.removePotionEffect(PotionEffectType.TRIAL_OMEN);
+                    if (p.hasPotionEffect(PotionEffectType.RAID_OMEN)) p.removePotionEffect(PotionEffectType.RAID_OMEN);
+                }
 
                 if (p.getLocation().distanceSquared(loc) <= rangeSq) {
                     // 檢查玩家冷卻資格
