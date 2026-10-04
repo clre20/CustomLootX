@@ -478,6 +478,10 @@ public class SpawnerTemplateManager {
         saveRuntimeData();
     }
 
+    public Map<String, String> getPlacedSpawners() {
+        return Collections.unmodifiableMap(placedSpawners);
+    }
+
     public Location parseLocation(String locKey) {
         if (locKey == null || locKey.isEmpty()) return null;
         Location cached = locationCache.get(locKey);
@@ -549,7 +553,8 @@ public class SpawnerTemplateManager {
         // 2. 同步 TileState (3D 旋轉實體預覽模型、感應範圍、冷卻時間與 PDC)
         if (block.getState() instanceof TrialSpawner tsState) {
             tsState.setOminous(template.isOminous());
-            tsState.setRequiredPlayerRange(template.getPlayerRange());
+            // 核心免疫防護：徹底鎖定原版原生感應距離為 0，遮斷原版原生物理感應，避免玩家攜帶不祥之兆/試煉預兆時原版強行轉化為不祥樣式造成藍/橘外觀反覆跳動閃爍！
+            tsState.setRequiredPlayerRange(0);
 
             if (inCooldown) {
                 long cdTicks = Math.max(20L, cdSeconds * 20L);
@@ -752,6 +757,12 @@ public class SpawnerTemplateManager {
 
                     if (ts.isOminous() != template.isOminous()) {
                         ts.setOminous(template.isOminous());
+                        stateChanged = true;
+                    }
+
+                    // 核心免疫防護：強制維持原版原生感應距離為 0，徹底杜絕外觀閃爍
+                    if (ts.getRequiredPlayerRange() != 0) {
+                        ts.setRequiredPlayerRange(0);
                         stateChanged = true;
                     }
 

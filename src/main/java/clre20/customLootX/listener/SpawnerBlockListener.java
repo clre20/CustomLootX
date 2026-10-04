@@ -19,6 +19,9 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityPotionEffectEvent;
+import org.bukkit.potion.PotionEffectType;
+import java.util.Map;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -260,6 +263,32 @@ public class SpawnerBlockListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onChunkLoad(ChunkLoadEvent event) {
         plugin.getSpawnerTemplateManager().onChunkLoad(event.getChunk());
+    }
+
+    /**
+     * 阻止自訂普通試煉生怪磚附近將玩家的不祥之兆強制轉換為試煉預兆 (雙重保險)
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPotionEffectConversion(EntityPotionEffectEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        if (event.getAction() != EntityPotionEffectEvent.Action.ADDED) return;
+
+        if (event.getCause() == EntityPotionEffectEvent.Cause.CONVERSION
+                && PotionEffectType.TRIAL_OMEN.equals(event.getModifiedType())) {
+            for (Map.Entry<String, String> entry : plugin.getSpawnerTemplateManager().getPlacedSpawners().entrySet()) {
+                Location loc = plugin.getSpawnerTemplateManager().parseLocation(entry.getKey());
+                if (loc != null && loc.getWorld() != null && loc.getWorld().equals(player.getWorld())) {
+                    SpawnerTemplate template = plugin.getSpawnerTemplateManager().getTemplate(entry.getValue());
+                    if (template != null && !template.isOminous()) {
+                        double range = Math.max(16.0, (double) template.getPlayerRange() + 4.0);
+                        if (loc.distanceSquared(player.getLocation()) <= range * range) {
+                            event.setCancelled(true);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private void openSpawnerWizard(Player player, ItemStack item) {

@@ -160,6 +160,7 @@ public class TrialSpawnerNmsUtil {
             if (state instanceof TrialSpawner) {
                 ts = (TrialSpawner) state;
                 ts.setOminous(ominous);
+                ts.setRequiredPlayerRange(0);
                 try {
                     ts.getNormalConfiguration().setSpawnedType(targetType);
                     ts.getOminousConfiguration().setSpawnedType(targetType);

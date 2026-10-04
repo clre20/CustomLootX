@@ -75,6 +75,7 @@ public class SpawnerBattleSession {
         Block block = spawnerLocation.getBlock();
         if (block.getState() instanceof org.bukkit.block.TrialSpawner tsState) {
             tsState.setOminous(template.isOminous());
+            tsState.setRequiredPlayerRange(0);
             for (UUID uuid : participatingPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null && p.isOnline() && p.getWorld().equals(spawnerLocation.getWorld())) {
@@ -138,6 +139,14 @@ public class SpawnerBattleSession {
         Block block = spawnerLocation.getBlock();
         if (block.getState() instanceof org.bukkit.block.TrialSpawner tsState) {
             boolean trackingChanged = false;
+            if (tsState.getRequiredPlayerRange() != 0) {
+                tsState.setRequiredPlayerRange(0);
+                trackingChanged = true;
+            }
+            if (tsState.isOminous() != template.isOminous()) {
+                tsState.setOminous(template.isOminous());
+                trackingChanged = true;
+            }
             for (UUID uuid : participatingPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
                 if (p != null && p.isOnline() && p.getWorld().equals(world)) {
@@ -397,6 +406,7 @@ public class SpawnerBattleSession {
         }
         if (block.getState() instanceof org.bukkit.block.TrialSpawner tsState) {
             tsState.setOminous(template.isOminous());
+            tsState.setRequiredPlayerRange(0);
             tsState.update(true, false);
         }
 
@@ -520,6 +530,7 @@ public class SpawnerBattleSession {
         Block block = spawnerLocation.getBlock();
         if (block.getState() instanceof org.bukkit.block.TrialSpawner tsState) {
             tsState.setOminous(template.isOminous());
+            tsState.setRequiredPlayerRange(0);
             for (Player p : new ArrayList<>(tsState.getTrackedPlayers())) {
                 tsState.stopTrackingPlayer(p);
             }
@@ -558,8 +569,9 @@ public class SpawnerBattleSession {
                     }
                 }
                 if (block.getState() instanceof org.bukkit.block.TrialSpawner ts) {
-                    if (ts.isOminous() != template.isOminous()) {
+                    if (ts.isOminous() != template.isOminous() || ts.getRequiredPlayerRange() != 0) {
                         ts.setOminous(template.isOminous());
+                        ts.setRequiredPlayerRange(0);
                         ts.update(true, false);
                     }
                 }
@@ -591,6 +603,7 @@ public class SpawnerBattleSession {
         Block block = spawnerLocation.getBlock();
         if (block.getState() instanceof org.bukkit.block.TrialSpawner tsState) {
             tsState.setOminous(template.isOminous());
+            tsState.setRequiredPlayerRange(0);
             for (Player p : new ArrayList<>(tsState.getTrackedPlayers())) {
                 tsState.stopTrackingPlayer(p);
             }
