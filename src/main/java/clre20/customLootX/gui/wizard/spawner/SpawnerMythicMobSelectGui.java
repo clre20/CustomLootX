@@ -125,7 +125,7 @@ public class SpawnerMythicMobSelectGui extends CustomGuiHolder {
         } else if (slot == 45) {
             context.getPlugin().getConfigManager().playSound(player, "click");
             context.setTransitioning(true);
-            new SpawnerWizardStep2MobGui(context, 1).open();
+            new SpawnerWizardStep3MobGui(context, 1).open();
             context.setTransitioning(false);
         } else if (slot == 48 && page > 1) {
             context.getPlugin().getConfigManager().playSound(player, "click");
@@ -144,7 +144,7 @@ public class SpawnerMythicMobSelectGui extends CustomGuiHolder {
                         if (id.isEmpty()) {
                             context.getPlugin().getConfigManager().send(player, "input-invalid");
                             context.getPlugin().getConfigManager().playSound(player, "error");
-                            new SpawnerWizardStep2MobGui(context, 1).open();
+                            new SpawnerWizardStep3MobGui(context, 1).open();
                             context.setTransitioning(false);
                             return;
                         }
@@ -152,7 +152,7 @@ public class SpawnerMythicMobSelectGui extends CustomGuiHolder {
                         context.setTransitioning(false);
                     },
                     () -> {
-                        new SpawnerWizardStep2MobGui(context, 1).open();
+                        new SpawnerWizardStep3MobGui(context, 1).open();
                         context.setTransitioning(false);
                     }
             );
@@ -175,7 +175,7 @@ public class SpawnerMythicMobSelectGui extends CustomGuiHolder {
         context.getTemplate().getMobPool().add(new SpawnerMobEntry(id, defaultChance));
         context.getPlugin().getConfigManager().playSound(player, "success");
         context.setTransitioning(true);
-        new SpawnerWizardStep2MobGui(context, 1).open();
+        new SpawnerWizardStep3MobGui(context, 1).open();
         context.setTransitioning(false);
     }
 

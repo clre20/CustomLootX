@@ -313,8 +313,9 @@ public class SpawnerBlockListener implements Listener {
                 return;
             }
 
-            boolean isExisting = session.getOriginalName() != null;
-            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, st, item, isExisting, draftId, true);
+            String origName = session.getOriginalName();
+            boolean isExisting = origName != null && !origName.trim().isEmpty();
+            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, st, item, isExisting, origName, draftId, true);
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().send(player, "draft-loaded");
             new SpawnerWizardStep1Gui(context).open();
@@ -364,7 +365,7 @@ public class SpawnerBlockListener implements Listener {
                         new java.util.ArrayList<>()
                 );
             }
-            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, template, item, true);
+            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, template, item, true, templateName, null, false);
             new SpawnerWizardStep1Gui(context).open();
         }
         plugin.getConfigManager().playSound(player, "click");

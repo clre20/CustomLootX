@@ -21,6 +21,8 @@ public class SpawnerTemplate {
     private boolean displayCycle = true;
     private String displayMobId = "CYCLE";
     private List<SpawnerMobEntry> mobPool;
+    private SpawnerSpawnMode spawnMode = SpawnerSpawnMode.RANDOM;
+    private List<String> spawnSequence = new ArrayList<>();
     private int totalMobs;
     private int simultaneousMobs;
     private int spawnDelaySeconds;
@@ -75,10 +77,60 @@ public class SpawnerTemplate {
                 victorySoundVolume, victorySoundPitch, cooldownMode, cooldownMinutes, rollCount, rewards);
     }
 
+    private List<List<String>> waves = new ArrayList<>();
+    private boolean waitWaveCleared = true;
+
     public SpawnerTemplate(String name, boolean ominous, String displayName, EntityType spawnedType,
                            boolean displayCycle, String displayMobId,
                            List<SpawnerMobEntry> mobPool,
                            int totalMobs, int simultaneousMobs, int spawnDelaySeconds, int playerRange,
+                           boolean showActionBar, boolean victorySoundEnabled, String victorySound,
+                           float victorySoundVolume, float victorySoundPitch,
+                           VaultCooldownMode cooldownMode, int cooldownMinutes, int rollCount,
+                           List<LootItem> rewards) {
+        this(name, ominous, displayName, spawnedType, displayCycle, displayMobId, mobPool,
+                SpawnerSpawnMode.SEQUENCE, (List<List<String>>) null,
+                spawnDelaySeconds, playerRange, true,
+                showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
+                cooldownMode, cooldownMinutes, rollCount, rewards);
+    }
+
+    public SpawnerTemplate(String name, boolean ominous, String displayName, EntityType spawnedType,
+                           boolean displayCycle, String displayMobId,
+                           List<SpawnerMobEntry> mobPool,
+                           SpawnerSpawnMode spawnMode, List<String> spawnSequence,
+                           int totalMobs, int simultaneousMobs, int spawnDelaySeconds, int playerRange,
+                           boolean showActionBar, boolean victorySoundEnabled, String victorySound,
+                           float victorySoundVolume, float victorySoundPitch,
+                           VaultCooldownMode cooldownMode, int cooldownMinutes, int rollCount,
+                           List<LootItem> rewards) {
+        this(name, ominous, displayName, spawnedType, displayCycle, displayMobId, mobPool,
+                spawnMode, convertSequenceToWaves(spawnSequence, simultaneousMobs, mobPool),
+                spawnDelaySeconds, playerRange, true,
+                showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
+                cooldownMode, cooldownMinutes, rollCount, rewards);
+    }
+
+    public SpawnerTemplate(String name, boolean ominous, String displayName, EntityType spawnedType,
+                           boolean displayCycle, String displayMobId,
+                           List<SpawnerMobEntry> mobPool,
+                           SpawnerSpawnMode spawnMode, List<List<String>> waves,
+                           int spawnDelaySeconds, int playerRange,
+                           boolean showActionBar, boolean victorySoundEnabled, String victorySound,
+                           float victorySoundVolume, float victorySoundPitch,
+                           VaultCooldownMode cooldownMode, int cooldownMinutes, int rollCount,
+                           List<LootItem> rewards) {
+        this(name, ominous, displayName, spawnedType, displayCycle, displayMobId, mobPool,
+                spawnMode, waves, spawnDelaySeconds, playerRange, true,
+                showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
+                cooldownMode, cooldownMinutes, rollCount, rewards);
+    }
+
+    public SpawnerTemplate(String name, boolean ominous, String displayName, EntityType spawnedType,
+                           boolean displayCycle, String displayMobId,
+                           List<SpawnerMobEntry> mobPool,
+                           SpawnerSpawnMode spawnMode, List<List<String>> waves,
+                           int spawnDelaySeconds, int playerRange, boolean waitWaveCleared,
                            boolean showActionBar, boolean victorySoundEnabled, String victorySound,
                            float victorySoundVolume, float victorySoundPitch,
                            VaultCooldownMode cooldownMode, int cooldownMinutes, int rollCount,
@@ -106,10 +158,16 @@ public class SpawnerTemplate {
         } else {
             this.spawnedType = (spawnedType == null) ? this.mobPool.get(0).getPreviewEntityType() : spawnedType;
         }
-        this.totalMobs = Math.max(1, totalMobs);
-        this.simultaneousMobs = Math.max(1, Math.min(16, simultaneousMobs));
+        this.spawnMode = (spawnMode == null) ? SpawnerSpawnMode.SEQUENCE : spawnMode;
+        this.waves = (waves == null) ? new ArrayList<>() : new ArrayList<>(waves);
+        if (this.waves.isEmpty()) {
+            List<String> w1 = new ArrayList<>();
+            w1.add(this.mobPool.get(0).getMobId());
+            this.waves.add(w1);
+        }
         this.spawnDelaySeconds = Math.max(1, spawnDelaySeconds);
         this.playerRange = Math.max(4, Math.min(48, playerRange));
+        this.waitWaveCleared = waitWaveCleared;
         this.showActionBar = showActionBar;
         this.victorySoundEnabled = victorySoundEnabled;
         this.victorySound = (victorySound == null || victorySound.isEmpty()) ? "UI_TOAST_CHALLENGE_COMPLETE" : victorySound;
@@ -119,6 +177,33 @@ public class SpawnerTemplate {
         this.cooldownMinutes = Math.max(1, cooldownMinutes);
         this.rollCount = Math.max(1, Math.min(16, rollCount));
         this.rewards = (rewards == null) ? new ArrayList<>() : new ArrayList<>(rewards);
+    }
+
+    private static List<List<String>> convertSequenceToWaves(List<String> sequence, int sim, List<SpawnerMobEntry> pool) {
+        List<List<String>> res = new ArrayList<>();
+        if (sequence != null && !sequence.isEmpty()) {
+            int batchSize = Math.max(1, sim);
+            List<String> cur = new ArrayList<>();
+            for (String s : sequence) {
+                cur.add(s);
+                if (cur.size() >= batchSize) {
+                    res.add(new ArrayList<>(cur));
+                    cur.clear();
+                }
+            }
+            if (!cur.isEmpty()) {
+                res.add(cur);
+            }
+        } else {
+            List<String> w1 = new ArrayList<>();
+            if (pool != null && !pool.isEmpty()) {
+                w1.add(pool.get(0).getMobId());
+            } else {
+                w1.add("UNSET");
+            }
+            res.add(w1);
+        }
+        return res;
     }
 
     public String getName() {
@@ -181,19 +266,73 @@ public class SpawnerTemplate {
     }
 
     public int getTotalMobs() {
-        return Math.max(1, totalMobs);
+        if (waves == null || waves.isEmpty()) {
+            return 1;
+        }
+        int sum = 0;
+        for (List<String> wave : waves) {
+            if (wave != null) {
+                sum += wave.size();
+            }
+        }
+        return Math.max(1, sum);
     }
 
     public void setTotalMobs(int totalMobs) {
-        this.totalMobs = Math.max(1, Math.min(64, totalMobs));
+        this.totalMobs = Math.max(1, totalMobs);
     }
 
     public int getSimultaneousMobs() {
-        return Math.max(1, Math.min(16, simultaneousMobs));
+        int maxWave = 1;
+        if (waves != null) {
+            for (List<String> w : waves) {
+                if (w != null && w.size() > maxWave) {
+                    maxWave = w.size();
+                }
+            }
+        }
+        return maxWave;
     }
 
     public void setSimultaneousMobs(int simultaneousMobs) {
         this.simultaneousMobs = Math.max(1, Math.min(16, simultaneousMobs));
+    }
+
+    public List<List<String>> getWaves() {
+        if (waves == null) {
+            waves = new ArrayList<>();
+        }
+        if (waves.isEmpty()) {
+            List<String> w1 = new ArrayList<>();
+            if (mobPool != null && !mobPool.isEmpty()) {
+                w1.add(mobPool.get(0).getMobId());
+            } else {
+                w1.add("UNSET");
+            }
+            waves.add(w1);
+        }
+        return waves;
+    }
+
+    public void setWaves(List<List<String>> waves) {
+        this.waves = (waves == null) ? new ArrayList<>() : new ArrayList<>(waves);
+        if (this.waves.isEmpty()) {
+            List<String> w1 = new ArrayList<>();
+            if (mobPool != null && !mobPool.isEmpty()) {
+                w1.add(mobPool.get(0).getMobId());
+            } else {
+                w1.add("UNSET");
+            }
+            this.waves.add(w1);
+        }
+    }
+
+    public boolean isWaitWaveCleared() {
+        return waitWaveCleared;
+    }
+
+    public void setWaitWaveCleared(boolean waitWaveCleared) {
+        this.waitWaveCleared = waitWaveCleared;
     }
 
     public int getSpawnDelaySeconds() {
@@ -301,9 +440,143 @@ public class SpawnerTemplate {
         return TextUtil.roundChance(total);
     }
 
+    public SpawnerSpawnMode getSpawnMode() {
+        return spawnMode == null ? SpawnerSpawnMode.RANDOM : spawnMode;
+    }
+
+    public void setSpawnMode(SpawnerSpawnMode spawnMode) {
+        this.spawnMode = (spawnMode == null) ? SpawnerSpawnMode.RANDOM : spawnMode;
+    }
+
+    public List<String> getSpawnSequence() {
+        List<String> seq = new ArrayList<>();
+        if (waves != null) {
+            for (List<String> w : waves) {
+                if (w != null) {
+                    seq.addAll(w);
+                }
+            }
+        }
+        return seq;
+    }
+
+    public void setSpawnSequence(List<String> spawnSequence) {
+        this.spawnSequence = (spawnSequence == null) ? new ArrayList<>() : new ArrayList<>(spawnSequence);
+    }
+
+    public void syncSequenceLength() {
+        // No-op for wave-based structure
+    }
+
+    public boolean hasRandomInSequence() {
+        if (waves != null) {
+            for (List<String> w : waves) {
+                if (w != null) {
+                    for (String id : w) {
+                        if (id == null || "RANDOM".equalsIgnoreCase(id.trim()) || "UNSET".equalsIgnoreCase(id.trim())) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public boolean hasUnsetInWaves() {
+        if (waves == null || waves.isEmpty()) return true;
+        for (List<String> wave : waves) {
+            if (wave == null || wave.isEmpty()) return true;
+            for (String mob : wave) {
+                if (mob == null || mob.trim().isEmpty() || "UNSET".equalsIgnoreCase(mob.trim())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public boolean isTotalMobChanceValid() {
+        if (!hasRandomInSequence()) {
+            // 自訂模式且全部指定固定怪物，完全免設機率！
+            return true;
+        }
         if (getMobPool().isEmpty()) return false;
         return Math.abs(getTotalMobChance() - 100.0) < 0.0001;
+    }
+
+    /**
+     * 依波次與索引取得怪物項目
+     */
+    public SpawnerMobEntry getMobEntryForWave(int waveIndex, int mobIndex) {
+        if (waves == null || waves.isEmpty()) {
+            return rollSingleMob();
+        }
+        if (waveIndex < 0 || waveIndex >= waves.size()) {
+            return rollSingleMob();
+        }
+        List<String> wave = waves.get(waveIndex);
+        if (wave == null || mobIndex < 0 || mobIndex >= wave.size()) {
+            return rollSingleMob();
+        }
+        String targetId = wave.get(mobIndex);
+        if (targetId == null || "RANDOM".equalsIgnoreCase(targetId.trim()) || "UNSET".equalsIgnoreCase(targetId.trim())) {
+            return rollSingleMob();
+        }
+        for (SpawnerMobEntry entry : getMobPool()) {
+            if (entry.getMobId().equalsIgnoreCase(targetId)) {
+                return entry;
+            }
+            if (entry.isMythic() && ("mm:" + entry.getMobId()).equalsIgnoreCase(targetId)) {
+                return entry;
+            }
+        }
+        try {
+            if (targetId.toLowerCase().startsWith("mm:") || targetId.toLowerCase().startsWith("mythic:")) {
+                String mmId = targetId.substring(targetId.indexOf(':') + 1);
+                return new SpawnerMobEntry(true, mmId, mmId, 0.0);
+            }
+            EntityType et = EntityType.valueOf(targetId.toUpperCase());
+            return new SpawnerMobEntry(et, 0.0);
+        } catch (Exception ignored) {}
+        return rollSingleMob();
+    }
+
+    /**
+     * 依序號取得怪物項目（支援自訂順序模式與隨機抽取）
+     */
+    public SpawnerMobEntry getMobEntryForSequenceIndex(int index) {
+        List<String> seq = getSpawnSequence();
+        if (seq.isEmpty()) {
+            return rollSingleMob();
+        }
+        int safeIndex = Math.max(0, Math.min(index, seq.size() - 1));
+        String targetId = seq.get(safeIndex);
+        if (targetId == null || "RANDOM".equalsIgnoreCase(targetId.trim()) || "UNSET".equalsIgnoreCase(targetId.trim())) {
+            return rollSingleMob();
+        }
+
+        // 比對怪物池中的項目
+        for (SpawnerMobEntry entry : getMobPool()) {
+            if (entry.getMobId().equalsIgnoreCase(targetId)) {
+                return entry;
+            }
+            if (entry.isMythic() && ("mm:" + entry.getMobId()).equalsIgnoreCase(targetId)) {
+                return entry;
+            }
+        }
+
+        // 若不在池中但為合法 ID，嘗試構建
+        try {
+            if (targetId.toLowerCase().startsWith("mm:") || targetId.toLowerCase().startsWith("mythic:")) {
+                String mmId = targetId.substring(targetId.indexOf(':') + 1);
+                return new SpawnerMobEntry(true, mmId, mmId, 0.0);
+            }
+            EntityType et = EntityType.valueOf(targetId.toUpperCase());
+            return new SpawnerMobEntry(et, 0.0);
+        } catch (Exception ignored) {}
+
+        return rollSingleMob();
     }
 
     /**
@@ -400,6 +673,12 @@ public class SpawnerTemplate {
         for (SpawnerMobEntry mob : getMobPool()) {
             clonedMobs.add(mob.cloneEntry());
         }
+        List<List<String>> clonedWaves = new ArrayList<>();
+        if (this.waves != null) {
+            for (List<String> w : this.waves) {
+                clonedWaves.add(new ArrayList<>(w));
+            }
+        }
         return new SpawnerTemplate(
                 this.name,
                 this.ominous,
@@ -408,10 +687,11 @@ public class SpawnerTemplate {
                 this.displayCycle,
                 this.displayMobId,
                 clonedMobs,
-                this.totalMobs,
-                this.simultaneousMobs,
+                this.spawnMode,
+                clonedWaves,
                 this.spawnDelaySeconds,
                 this.playerRange,
+                this.waitWaveCleared,
                 this.showActionBar,
                 this.victorySoundEnabled,
                 this.victorySound,

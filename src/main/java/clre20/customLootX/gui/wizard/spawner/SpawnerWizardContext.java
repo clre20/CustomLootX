@@ -26,16 +26,22 @@ public class SpawnerWizardContext {
     private boolean draftAbandoned = false;
 
     public SpawnerWizardContext(CustomLootX plugin, Player player, SpawnerTemplate template, ItemStack itemInHand, boolean editingExisting) {
-        this(plugin, player, template, itemInHand, editingExisting, null, false);
+        this(plugin, player, template, itemInHand, editingExisting, (editingExisting && template != null) ? template.getName() : null, null, false);
     }
 
     public SpawnerWizardContext(CustomLootX plugin, Player player, SpawnerTemplate template, ItemStack itemInHand, boolean editingExisting, String draftId, boolean isDraft) {
+        this(plugin, player, template, itemInHand, editingExisting, (editingExisting && template != null) ? template.getName() : null, draftId, isDraft);
+    }
+
+    public SpawnerWizardContext(CustomLootX plugin, Player player, SpawnerTemplate template, ItemStack itemInHand, boolean editingExisting, String originalName, String draftId, boolean isDraft) {
         this.plugin = plugin;
         this.player = player;
         this.template = template;
         this.itemInHand = itemInHand;
         this.editingExisting = editingExisting;
-        this.originalName = (editingExisting && template != null) ? template.getName() : null;
+        this.originalName = (originalName != null && !originalName.trim().isEmpty())
+                ? originalName
+                : ((editingExisting && template != null) ? template.getName() : null);
         this.draftId = draftId;
         this.isDraft = isDraft;
     }
@@ -113,7 +119,7 @@ public class SpawnerWizardContext {
     }
 
     /**
-     * 當使用者按 ESC / X 退出時，自動暫存手持物品
+     * 當使用者按 ESC / X 退出時，自動暫存手持物品或儲存草稿
      */
     public void saveAsDraft() {
         if (savedSuccessfully || draftAbandoned) return;
@@ -126,17 +132,33 @@ public class SpawnerWizardContext {
         DraftSession session = plugin.getDraftManager().saveDraft(DraftType.SPAWNER, draftId, originalName, template);
         if (session != null) {
             ItemStack held = itemInHand;
-            if (held == null || held.getType().isAir()) {
-                held = player.getInventory().getItemInMainHand();
+            ItemStack mainHand = player.getInventory().getItemInMainHand();
+            if (plugin.getItemManager().isCustomSpawnerItem(mainHand)) {
+                held = mainHand;
+            } else if (held == null || held.getType().isAir()) {
+                held = mainHand;
             }
+
+            boolean itemUpdated = false;
             if (plugin.getItemManager().isCustomSpawnerItem(held)) {
                 String dName = template.getDisplayName();
                 if (dName == null || dName.trim().isEmpty()) {
                     dName = template.getName();
                 }
                 plugin.getItemManager().applyDraft(held, DraftType.SPAWNER, draftId, originalName, session.getExpireTime(), dName);
+                if (plugin.getItemManager().isCustomSpawnerItem(player.getInventory().getItemInMainHand())) {
+                    player.getInventory().setItemInMainHand(held);
+                } else if (plugin.getItemManager().isCustomSpawnerItem(player.getInventory().getItemInOffHand())) {
+                    player.getInventory().setItemInOffHand(held);
+                }
+                player.updateInventory();
+                itemUpdated = true;
             }
-            plugin.getConfigManager().send(player, "draft-saved", "%days%", String.valueOf(plugin.getDraftManager().getExpireDays()));
+            if (itemUpdated) {
+                plugin.getConfigManager().send(player, "draft-saved", "%days%", String.valueOf(plugin.getDraftManager().getExpireDays()));
+            } else {
+                plugin.getConfigManager().send(player, "draft-saved-cmd", "%days%", String.valueOf(plugin.getDraftManager().getExpireDays()), "%name%", template.getName());
+            }
             plugin.getConfigManager().playSound(player, "click");
         }
     }

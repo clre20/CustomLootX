@@ -64,7 +64,9 @@ public class ConfigManager {
         defaultFallbacks.put("edit-usage", "&c用法: /%label% edit <suspicious|vault|spawner> <名稱>");
         defaultFallbacks.put("delete-usage", "&c用法: /%label% delete <suspicious|vault|spawner> <名稱>");
         defaultFallbacks.put("draft-saved", "&a已為您暫存當前編輯進度至手持方塊中（草稿保留 %days% 天）。");
+        defaultFallbacks.put("draft-saved-cmd", "&a已為您暫存當前編輯進度（草稿保留 %days% 天），下次輸入 &e/clx edit &a指令即可繼續編輯！");
         defaultFallbacks.put("draft-loaded", "&a已為您還原上次未儲存的草稿編輯進度！");
+        defaultFallbacks.put("draft-loaded-cmd", "&a已為您載入 [%name%] 上次未儲存的暫存草稿！(若欲放棄草稿，可在最後確認介面點擊「放棄變更」)");
         defaultFallbacks.put("draft-expired-reverted", "&e此方塊的草稿已過期，已自動載入正式版本！");
         defaultFallbacks.put("save-cancelled", "&e已放棄變更並清理草稿暫存檔案。");
         defaultFallbacks.put("cannot-place-draft", "&c此方塊包含尚未儲存的草稿！請手持對空氣點擊右鍵完成儲存後再放置。");
@@ -73,6 +75,7 @@ public class ConfigManager {
         defaultFallbacks.put("sum-not-100", "&c儲存失敗！所有掉落物機率總和必須恰好為 100.00%（目前總和: &e%total%&c，差額: &e%diff%&c）！");
         defaultFallbacks.put("template-save-failed", "&c儲存配置檔案失敗，請檢查主控台日誌！");
         defaultFallbacks.put("spawner-save-success", "&a已成功儲存試煉生怪磚配置: &e%name%&a！");
+        defaultFallbacks.put("spawner-mode-switched", "&8[&6CustomLootX&8] &a已切換生怪磚生成模式為: &e%mode%&a！");
         defaultFallbacks.put("spawner-in-cooldown", "&c此試煉生怪磚冷卻中！剩餘 &e%time% 秒&c後可再次挑戰。");
         defaultFallbacks.put("spawner-already-completed", "&c你已經完成過此試煉挑戰，無法再次領取獲勝獎勵！");
         defaultFallbacks.put("spawner-ready-hint", "&a此試煉生怪磚已就緒！進入感應範圍即可啟動挑戰 (怪物: &e%mob%&a)！");

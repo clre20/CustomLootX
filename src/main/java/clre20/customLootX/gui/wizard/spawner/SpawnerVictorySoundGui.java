@@ -309,10 +309,10 @@ public class SpawnerVictorySoundGui extends CustomGuiHolder {
                 render();
             }
         } else if (slot == 45 || slot == 53) {
-            // 返回步驟三
+            // 返回步驟二
             context.getPlugin().getConfigManager().playSound(player, "click");
             context.setTransitioning(true);
-            new SpawnerWizardStep3WavesGui(context).open();
+            new SpawnerWizardStep2WavesGui(context).open();
             context.setTransitioning(false);
         }
     }

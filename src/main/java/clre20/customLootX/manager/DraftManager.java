@@ -54,7 +54,15 @@ public class DraftManager {
     public DraftSession saveDraft(DraftType type, String draftId, String originalName, Object templateData) {
         if (type == null || templateData == null) return null;
         if (draftId == null || draftId.trim().isEmpty()) {
-            draftId = generateDraftId();
+            if (originalName != null && !originalName.trim().isEmpty()) {
+                DraftSession existing = findDraftByOriginalName(type, originalName);
+                if (existing != null) {
+                    draftId = existing.getDraftId();
+                }
+            }
+            if (draftId == null || draftId.trim().isEmpty()) {
+                draftId = generateDraftId();
+            }
         }
 
         File file = new File(getDraftDir(type), draftId + ".yml");
@@ -123,6 +131,56 @@ public class DraftManager {
         if (type == null || draftId == null || draftId.trim().isEmpty()) return false;
         File file = new File(getDraftDir(type), draftId + ".yml");
         return file.exists();
+    }
+
+    /**
+     * 依據配置原名搜尋尚未過期的草稿
+     */
+    public DraftSession findDraftByOriginalName(DraftType type, String originalName) {
+        if (type == null || originalName == null || originalName.trim().isEmpty()) return null;
+        File dir = getDraftDir(type);
+        if (!dir.exists()) return null;
+
+        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
+        if (files == null) return null;
+
+        DraftSession newest = null;
+        for (File file : files) {
+            String draftId = file.getName().substring(0, file.getName().length() - 4);
+            DraftSession session = loadDraft(type, draftId);
+            if (session != null && !session.isExpired()) {
+                if (originalName.equalsIgnoreCase(session.getOriginalName())) {
+                    if (newest == null || session.getCreatedTime() > newest.getCreatedTime()) {
+                        newest = session;
+                    }
+                }
+            }
+        }
+        return newest;
+    }
+
+    /**
+     * 依據配置原名刪除所有草稿
+     */
+    public boolean deleteDraftByOriginalName(DraftType type, String originalName) {
+        if (type == null || originalName == null || originalName.trim().isEmpty()) return false;
+        File dir = getDraftDir(type);
+        if (!dir.exists()) return false;
+
+        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
+        if (files == null) return false;
+
+        boolean deleted = false;
+        for (File file : files) {
+            String draftId = file.getName().substring(0, file.getName().length() - 4);
+            DraftSession session = loadDraft(type, draftId);
+            if (session != null && originalName.equalsIgnoreCase(session.getOriginalName())) {
+                if (file.delete()) {
+                    deleted = true;
+                }
+            }
+        }
+        return deleted;
     }
 
     /**
@@ -295,6 +353,13 @@ public class DraftManager {
             yaml.set("display-mob-id", template.getDisplayMobId());
         }
         yaml.set("spawned-type", template.getSpawnedType().name());
+        yaml.set("spawn-mode", "SEQUENCE");
+        yaml.set("spawn-sequence", template.getSpawnSequence());
+        List<List<String>> waveData = new ArrayList<>();
+        for (List<String> w : template.getWaves()) {
+            waveData.add(new ArrayList<>(w));
+        }
+        yaml.set("waves", waveData);
 
         List<Map<String, Object>> mobList = new ArrayList<>();
         for (SpawnerMobEntry entry : template.getMobPool()) {
@@ -313,6 +378,7 @@ public class DraftManager {
         yaml.set("wave.simultaneous-mobs", template.getSimultaneousMobs());
         yaml.set("wave.spawn-delay-seconds", template.getSpawnDelaySeconds());
         yaml.set("wave.player-range", template.getPlayerRange());
+        yaml.set("wave.wait-wave-cleared", template.isWaitWaveCleared());
         yaml.set("show-actionbar", template.isShowActionBar());
         yaml.set("victory-sound.enabled", template.isVictorySoundEnabled());
         yaml.set("victory-sound.sound", template.getVictorySound());
@@ -404,9 +470,46 @@ public class DraftManager {
         float victorySoundVolume = (float) yaml.getDouble("victory-sound.volume", 1.0);
         float victorySoundPitch = (float) yaml.getDouble("victory-sound.pitch", 1.2);
 
+        String spawnModeStr = yaml.getString("spawn-mode", "SEQUENCE");
+        clre20.customLootX.model.SpawnerSpawnMode spawnMode = clre20.customLootX.model.SpawnerSpawnMode.fromString(spawnModeStr);
+
+        List<List<String>> waves = new ArrayList<>();
+        if (yaml.isList("waves")) {
+            List<?> rawWaves = yaml.getList("waves");
+            if (rawWaves != null) {
+                for (Object obj : rawWaves) {
+                    if (obj instanceof List<?> l) {
+                        List<String> w = new ArrayList<>();
+                        for (Object o : l) {
+                            if (o != null) w.add(String.valueOf(o));
+                        }
+                        waves.add(w);
+                    }
+                }
+            }
+        }
+        if (waves.isEmpty()) {
+            List<String> spawnSequence = yaml.getStringList("spawn-sequence");
+            int sim = Math.max(1, simultaneousMobs);
+            if (!spawnSequence.isEmpty()) {
+                List<String> cur = new ArrayList<>();
+                for (String s : spawnSequence) {
+                    cur.add(s);
+                    if (cur.size() >= sim) {
+                        waves.add(new ArrayList<>(cur));
+                        cur.clear();
+                    }
+                }
+                if (!cur.isEmpty()) waves.add(cur);
+            }
+        }
+
+        boolean waitWaveCleared = yaml.getBoolean("wave.wait-wave-cleared", true);
+
         return new SpawnerTemplate(name, ominous, displayName, spawnedType, displayCycle, displayMobId,
-                mobPool, totalMobs, simultaneousMobs,
-                spawnDelaySeconds, playerRange, showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
+                mobPool, spawnMode, waves,
+                spawnDelaySeconds, playerRange, waitWaveCleared,
+                showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
                 mode, cooldownMinutes, rollCount, items);
     }
 }

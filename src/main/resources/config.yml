@@ -64,11 +64,17 @@ messages:
   # 步驟精靈儲存失敗時
   save-failed: "&c儲存失敗，請檢查後台日誌！"
 
-  # 草稿自動暫存提示
+  # 草稿自動暫存提示 (手持方塊)
   draft-saved: "&a已為您暫存當前編輯進度至手持方塊中（草稿保留 %days% 天）。"
 
-  # 草稿還原提示
+  # 草稿自動暫存提示 (指令編輯)
+  draft-saved-cmd: "&a已為您暫存當前編輯進度（草稿保留 %days% 天），下次輸入 &e/clx edit &a指令即可繼續編輯！"
+
+  # 草稿還原提示 (手持方塊)
   draft-loaded: "&a已為您還原上次未儲存的草稿編輯進度！"
+
+  # 草稿還原提示 (指令編輯)
+  draft-loaded-cmd: "&a已為您載入 [%name%] 上次未儲存的暫存草稿！(若欲放棄草稿，可在最後確認介面點擊「放棄變更」)"
 
   # 草稿過期還原提示
   draft-expired-reverted: "&e此方塊的草稿已過期，已自動載入正式版本！"
@@ -147,6 +153,9 @@ messages:
 
   # 生怪磚配置儲存成功
   spawner-save-success: "&a已成功儲存試煉生怪磚配置: &e%name%&a！"
+
+  # 生怪磚生成模式切換提示
+  spawner-mode-switched: "&8[&6CustomLootX&8] &a已切換生怪磚生成模式為: &e%mode%&a！"
 
   # 配置檔案儲存失敗
   template-save-failed: "&c儲存配置檔案失敗，請檢查主控台日誌！"

@@ -18,21 +18,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 試煉生怪磚 [步驟 2/6] 怪物池與生成機率設定介面 (支援原版生物與 MythicMobs 自訂怪物)
+ * 試煉生怪磚 [步驟 3/6] 怪物名單挑選介面 (純挑選生物，完全無機率邏輯)
  */
-public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
+public class SpawnerWizardStep3MobGui extends CustomGuiHolder {
 
     private final SpawnerWizardContext context;
     private int page = 0;
     private static final int ITEMS_PER_PAGE = 45;
+    private boolean deleteMode = false;
 
-    public SpawnerWizardStep2MobGui(SpawnerWizardContext context, int pageNumber) {
+    public SpawnerWizardStep3MobGui(SpawnerWizardContext context, int pageNumber) {
         this.context = context;
         this.page = Math.max(0, pageNumber - 1);
+        this.deleteMode = false;
         this.inventory = Bukkit.createInventory(
                 this,
                 54,
-                context.getPlugin().getConfigManager().getComponent("gui.spawner.step2.pool-title", "&8[步驟 2/6] 怪物池與生成機率")
+                context.getPlugin().getConfigManager().getComponent("gui.spawner.step3.mob-title", "&8[步驟 3/6] 怪物名單挑選")
         );
         render();
     }
@@ -49,7 +51,7 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
         int startIndex = page * ITEMS_PER_PAGE;
         int endIndex = Math.min(startIndex + ITEMS_PER_PAGE, mobs.size());
 
-        // 擺放當前頁面的怪物項目
+        // 擺放當前頁面的怪物項目 (純展示與移除，不含機率)
         for (int i = startIndex; i < endIndex; i++) {
             SpawnerMobEntry mob = mobs.get(i);
             int slot = i - startIndex;
@@ -57,18 +59,26 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
             ItemStack displayItem = new ItemStack(mob.getIconMaterial());
             ItemMeta meta = displayItem.getItemMeta();
             if (meta != null) {
-                String title = (mob.isMythic() ? "&d[Mythic] &f" : "&e[原版] &f") + mob.getDisplayName();
+                String title = (mob.isMythic() ? "&d[Mythic] &f" : "&a[原版] &f") + mob.getDisplayName();
+                if (deleteMode) {
+                    title = "&c[點擊刪除] " + title;
+                }
                 meta.displayName(TextUtil.parse(title));
 
                 List<Component> lore = new ArrayList<>();
                 lore.add(TextUtil.parse("&8------------------------"));
                 lore.add(TextUtil.parse("&7內部代號: &f" + mob.getMobId()));
                 lore.add(TextUtil.parse("&7怪物類型: " + (mob.isMythic() ? "&dMythicMob 自訂怪物" : "&a原版生物")));
-                lore.add(TextUtil.parse("&e生成機率: &a" + String.format("%.2f%%", mob.getChance())));
                 lore.add(TextUtil.parse("&7"));
-                lore.add(TextUtil.parse("&e[點擊] &f設定機率或移除此怪物"));
+                if (deleteMode) {
+                    lore.add(TextUtil.parse("&c&l【刪除模式啟用中】"));
+                    lore.add(TextUtil.parse("&e[左鍵點擊] &c立即從名單中移除此怪物！"));
+                } else {
+                    lore.add(TextUtil.parse("&7可在下一步將此生物排入生成順序中"));
+                    lore.add(TextUtil.parse("&8(可點擊下方「開啟刪除模式」來移除此怪物)"));
+                }
                 if (mobs.size() == 1) {
-                    lore.add(TextUtil.parse("&8(池中唯一怪物無法移除)"));
+                    lore.add(TextUtil.parse("&8(清單中至少需保留 1 種生物)"));
                 }
                 lore.add(TextUtil.parse("&8------------------------"));
                 meta.lore(lore);
@@ -84,17 +94,21 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
             inventory.setItem(i, filler);
         }
 
-        // Slot 45: 返回步驟一
-        inventory.setItem(45, createButton(Material.ARROW, "&e⬅ 上一步 &f(種類與名稱)", List.of("&7返回 [步驟 1/6] 修改種類或名稱")));
+        // Slot 45: 返回步驟二 (波次與數量設定)
+        inventory.setItem(45, createButton(
+                Material.ARROW,
+                "&e⬅ 上一步 &f(波次與數量設定)",
+                List.of("&7返回 [步驟 2/6] 修改波次規模與間隔")
+        ));
 
-        // Slot 46: 新增原版生物 (生怪蛋代表)
+        // Slot 46: 新增原版生物
         inventory.setItem(46, createButton(
                 Material.ZOMBIE_SPAWN_EGG,
                 "&a➕ 新增原版生物",
                 List.of(
-                        "&7從 83 種預設原版生物中挑選加入",
+                        "&7從 83 種預設原版生物中挑選加入候選名單",
                         "&7分類: 敵對(43)、中立(16)、被動友好(24)",
-                        "&e點擊挑選"
+                        "&e點擊挑選加入"
                 )
         ));
 
@@ -121,42 +135,35 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
             ));
         }
 
-        // Slot 48: 自動均分機率
-        inventory.setItem(48, createButton(
-                Material.HOPPER,
-                "&b⚖ 自動均分機率",
-                List.of(
-                        "&7將目前怪物池中所有怪物的機率平均分配",
-                        "&7總和自動湊齊至 100.00%",
-                        "&e點擊自動均分"
-                )
-        ));
-
-        // Slot 49: 總機率狀態
-        double totalChance = template.getTotalMobChance();
-        boolean isValid = template.isTotalMobChanceValid();
-        String totalTitle = isValid
-                ? "&a✔ 怪物池總機率: 100.00%"
-                : "&c✖ 怪物池總機率: " + String.format("%.2f%%", totalChance);
-        List<String> totalLore;
-        if (isValid) {
-            totalLore = List.of(
-                    "&7機率總和完全符合 100.00%",
-                    "&a可前往下一步進行波次設定！"
-            );
+        // Slot 48: 刪除模式按鈕 (點擊切換，全流程支援純左鍵操作)
+        if (!deleteMode) {
+            inventory.setItem(48, createButton(
+                    Material.HOPPER,
+                    "&c🗑 開啟刪除模式",
+                    List.of(
+                            "&7點擊開啟刪除模式",
+                            "&7開啟後，可透過 &e左鍵點擊 &7上方生物直接從名單中移除",
+                            "&7(全流程均可純靠左鍵完成)",
+                            "&7",
+                            "&7當前狀態: &8【已關閉】",
+                            "&e[左鍵點擊] &c開啟刪除模式"
+                    )
+            ));
         } else {
-            double diff = 100.0 - totalChance;
-            String diffStr = (diff > 0 ? ("&e尚缺: &a+" + String.format("%.2f%%", diff)) : ("&c超出: &4-" + String.format("%.2f%%", Math.abs(diff))));
-            totalLore = List.of(
-                    "&7目前怪物池所有怪物機率總和:",
-                    "&f" + String.format("%.2f%%", totalChance),
-                    diffStr,
-                    "&c必須正好等於 100.00% 才能前往下一步！"
-            );
+            inventory.setItem(48, createButton(
+                    Material.REDSTONE_BLOCK,
+                    "&a✔ 關閉刪除模式",
+                    List.of(
+                            "&e當前已開啟刪除模式！",
+                            "&c左鍵點擊上方任意怪物即可立即將其移除",
+                            "&7",
+                            "&7當前狀態: &c&l【開啟中 (點怪即刪)】",
+                            "&e[左鍵點擊] &a關閉刪除模式 (恢復正常)"
+                    )
+            ));
         }
-        inventory.setItem(49, createButton(isValid ? Material.EMERALD : Material.REDSTONE, totalTitle, totalLore));
 
-        // Slot 50: 籠內 3D 模型旋轉預覽 (支援固定各怪物與循環輪替)
+        // Slot 50: 籠內 3D 模型旋轉預覽
         ItemStack previewButton;
         List<SpawnerMobEntry> mobList = template.getMobPool();
         if (template.isDisplayCycle()) {
@@ -164,8 +171,7 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
                     Material.CLOCK,
                     "&6籠內預覽模型: &b🔄 循環輪替",
                     List.of(
-                            "&7生怪磚方塊內部將定時依序輪替展示怪物池所有生物",
-                            "&7遇到 MythicMobs 生物時將自動以其基底生物顯示",
+                            "&7生怪磚方塊內部將定時依序輪替展示怪物名單所有生物",
                             "&7當前狀態: &a【循環輪播】",
                             "&7",
                             "&e[點擊] &f切換為固定特定怪物"
@@ -193,19 +199,16 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
                 List<String> lore = new ArrayList<>();
                 lore.add("&7生怪磚方塊內部將固定旋轉展示此模型");
                 if (currentEntry.isMythic()) {
-                    lore.add("&7自訂怪物: &d" + currentEntry.getMobId() + " &8(MythicMobs)");
+                    lore.add("&7自訂怪物: &d" + currentEntry.getMobId());
                     lore.add("&7內部顯示基底生物: &f" + TextUtil.getMobDisplayName(baseType));
                 } else {
                     lore.add("&7實體類型: &f" + baseType.name());
                 }
                 lore.add("&7當前狀態: &e【固定顯示】");
                 lore.add("&7");
-                lore.add("&e[點擊] &f切換怪物池中的下一隻怪物或【循環輪替】");
+                lore.add("&e[點擊] &f切換名單中的下一隻怪物或【循環輪替】");
 
-                String title = currentEntry.isMythic()
-                        ? ("&6籠內預覽模型: &a" + mobName + " &7(基底: " + TextUtil.getMobDisplayName(baseType) + ")")
-                        : ("&6籠內預覽模型: &a" + mobName);
-
+                String title = "&6籠內預覽模型: &a" + mobName;
                 previewButton = createButton(icon != null ? icon : Material.SPAWNER, title, lore);
             } else {
                 previewButton = createButton(Material.SPAWNER, "&6籠內預覽模型: &a" + TextUtil.getMobDisplayName(template.getSpawnedType()), List.of("&e[點擊] &f切換"));
@@ -213,31 +216,19 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
         }
         inventory.setItem(50, previewButton);
 
-        // Slot 53: 下一步 (步驟三：波次與數量設定)
-        if (isValid) {
-            inventory.setItem(53, createButton(
-                    Material.LIME_CONCRETE,
-                    "&a下一步 ➜ &f(波次與數量設定)",
-                    List.of(
-                            "&7前往 [步驟 3/6] 設定生怪數量與間隔",
-                            "&a點擊前往下一步"
-                    )
-            ));
-        } else {
-            inventory.setItem(53, createButton(
-                    Material.RED_CONCRETE,
-                    "&c下一步 ➜ &7(機率非 100%)",
-                    List.of(
-                            "&c怪物池所有怪物機率總和必須恰好為 100.00%",
-                            "&7目前總和為 &f" + String.format("%.2f%%", totalChance),
-                            "&e可使用【自動均分】或點擊單個怪物調整"
-                    )
-            ));
-        }
+        // Slot 53: 下一步 (前往步驟四：怪物生成順序編排)
+        inventory.setItem(53, createButton(
+                Material.LIME_CONCRETE,
+                "&a下一步 ➜ &f(怪物生成順序編排)",
+                List.of(
+                        "&7名單已就緒，前往 [步驟 4/6] 編排各波次怪物生成順序",
+                        "&a點擊前往下一步"
+                )
+        ));
     }
 
     private ItemStack createButton(Material mat, String name, List<String> loreLines) {
-        ItemStack item = new ItemStack(mat);
+        ItemStack item = new ItemStack(mat != null ? mat : Material.STONE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(TextUtil.parse(name));
@@ -264,20 +255,69 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
             int index = page * ITEMS_PER_PAGE + slot;
             List<SpawnerMobEntry> mobs = context.getTemplate().getMobPool();
             if (index < mobs.size()) {
-                SpawnerMobEntry target = mobs.get(index);
-                if (event.isRightClick()) {
+                if (deleteMode) {
+                    // 刪除模式下：左鍵 (或任意點擊) 直接移除！
                     if (mobs.size() > 1) {
-                        mobs.remove(index);
+                        SpawnerMobEntry removed = mobs.remove(index);
+                        player.sendMessage(TextUtil.parse("&c[CustomLootX] &7已從候選名單移除怪物: &f" + removed.getDisplayName()));
                         context.getPlugin().getConfigManager().playSound(player, "click");
+
+                        // 若當前顯示模型是被刪除的生物，自動更新
+                        SpawnerTemplate template = context.getTemplate();
+                        if (!template.isDisplayCycle() && removed.getMobId().equalsIgnoreCase(template.getDisplayMobId())) {
+                            template.setDisplayMobId(mobs.get(0).getMobId());
+                            template.setSpawnedType(mobs.get(0).getPreviewEntityType());
+                        }
+
+                        // 若生成順序中有該怪物，將其改為 RANDOM
+                        for (List<String> wave : template.getWaves()) {
+                            if (wave != null) {
+                                for (int s = 0; s < wave.size(); s++) {
+                                    if (wave.get(s).equalsIgnoreCase(removed.getMobId()) || wave.get(s).equalsIgnoreCase("mm:" + removed.getMobId())) {
+                                        wave.set(s, "RANDOM");
+                                    }
+                                }
+                            }
+                        }
+
                         render();
                     } else {
+                        player.sendMessage(TextUtil.parse("&c[CustomLootX] 怪物名單中至少需保留 1 種生物！"));
                         context.getPlugin().getConfigManager().playSound(player, "error");
                     }
                 } else {
-                    context.getPlugin().getConfigManager().playSound(player, "click");
-                    context.setTransitioning(true);
-                    new SpawnerMobChanceGui(context, target).open();
-                    context.setTransitioning(false);
+                    // 非刪除模式：右鍵仍支援移除 (快捷鍵)
+                    if (event.isRightClick()) {
+                        if (mobs.size() > 1) {
+                            SpawnerMobEntry removed = mobs.remove(index);
+                            player.sendMessage(TextUtil.parse("&c[CustomLootX] &7已從候選名單移除怪物: &f" + removed.getDisplayName()));
+                            context.getPlugin().getConfigManager().playSound(player, "click");
+
+                            SpawnerTemplate template = context.getTemplate();
+                            if (!template.isDisplayCycle() && removed.getMobId().equalsIgnoreCase(template.getDisplayMobId())) {
+                                template.setDisplayMobId(mobs.get(0).getMobId());
+                                template.setSpawnedType(mobs.get(0).getPreviewEntityType());
+                            }
+
+                            for (List<String> wave : template.getWaves()) {
+                                if (wave != null) {
+                                    for (int s = 0; s < wave.size(); s++) {
+                                        if (wave.get(s).equalsIgnoreCase(removed.getMobId()) || wave.get(s).equalsIgnoreCase("mm:" + removed.getMobId())) {
+                                            wave.set(s, "RANDOM");
+                                        }
+                                    }
+                                }
+                            }
+
+                            render();
+                        } else {
+                            player.sendMessage(TextUtil.parse("&c[CustomLootX] 怪物名單中至少需保留 1 種生物！"));
+                            context.getPlugin().getConfigManager().playSound(player, "error");
+                        }
+                    } else {
+                        context.getPlugin().getConfigManager().playSound(player, "click");
+                        player.sendMessage(TextUtil.parse("&7[CustomLootX] 提示: 若要移除此怪物，可點擊下方 &c[🗑 開啟刪除模式]&7！"));
+                    }
                 }
             }
             return;
@@ -286,10 +326,10 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
         // 底部工具列 (45 ~ 53)
         switch (slot) {
             case 45 -> {
-                // 返回步驟一
+                // 返回步驟二 (波次與數量設定)
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 context.setTransitioning(true);
-                new SpawnerWizardStep1Gui(context).open();
+                new SpawnerWizardStep2WavesGui(context).open();
                 context.setTransitioning(false);
             }
             case 46 -> {
@@ -312,23 +352,18 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
                 }
             }
             case 48 -> {
-                // 自動均分機率
-                List<SpawnerMobEntry> mobs = context.getTemplate().getMobPool();
-                if (!mobs.isEmpty()) {
-                    distributeEvenly(mobs);
-                    context.getPlugin().getConfigManager().playSound(player, "success");
-                    render();
-                } else {
-                    context.getPlugin().getConfigManager().playSound(player, "error");
-                }
+                // 切換刪除模式
+                deleteMode = !deleteMode;
+                context.getPlugin().getConfigManager().playSound(player, "click");
+                render();
             }
             case 50 -> {
-                // 切換籠內 3D 預覽模型 (選項 0 ~ N-1 為怪物池中的怪物，選項 N 為 🔄 循環輪替)
+                // 切換籠內 3D 預覽模型
                 List<SpawnerMobEntry> mobs = context.getTemplate().getMobPool();
                 if (!mobs.isEmpty()) {
                     int currentIndex = -1;
                     if (context.getTemplate().isDisplayCycle()) {
-                        currentIndex = mobs.size(); // 當前為【循環輪替】
+                        currentIndex = mobs.size();
                     } else {
                         String currentId = context.getTemplate().getDisplayMobId();
                         if (currentId != null) {
@@ -352,17 +387,15 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
                         }
                     }
 
-                    int totalOptions = mobs.size() + 1; // 所有怪物 + 1個循環選項
+                    int totalOptions = mobs.size() + 1;
                     int nextIndex = (currentIndex + 1) % totalOptions;
 
                     if (nextIndex < mobs.size()) {
-                        // 切換為指定怪物 (固定顯示)
                         SpawnerMobEntry nextEntry = mobs.get(nextIndex);
                         context.getTemplate().setDisplayCycle(false);
                         context.getTemplate().setDisplayMobId(nextEntry.getMobId());
                         context.getTemplate().setSpawnedType(nextEntry.getPreviewEntityType());
                     } else {
-                        // 切換為【循環輪替】
                         context.getTemplate().setDisplayCycle(true);
                         context.getTemplate().setDisplayMobId("CYCLE");
                         context.getTemplate().setSpawnedType(mobs.get(0).getPreviewEntityType());
@@ -373,16 +406,11 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
                 }
             }
             case 53 -> {
-                // 下一步 (步驟三：波次與數量設定)
-                if (context.getTemplate().isTotalMobChanceValid()) {
-                    context.getPlugin().getConfigManager().playSound(player, "click");
-                    context.setTransitioning(true);
-                    new SpawnerWizardStep3WavesGui(context).open();
-                    context.setTransitioning(false);
-                } else {
-                    player.sendMessage(TextUtil.parse("&c[CustomLootX] 怪物池機率總和必須恰好為 100.00%！"));
-                    context.getPlugin().getConfigManager().playSound(player, "error");
-                }
+                // 前往步驟四 (怪物生成順序編排)
+                context.getPlugin().getConfigManager().playSound(player, "click");
+                context.setTransitioning(true);
+                new SpawnerWizardStep4SequenceGui(context).open();
+                context.setTransitioning(false);
             }
         }
     }
@@ -391,23 +419,6 @@ public class SpawnerWizardStep2MobGui extends CustomGuiHolder {
     public void handleClose(org.bukkit.event.inventory.InventoryCloseEvent event) {
         if (!context.isTransitioning() && !context.isSavedSuccessfully() && !context.isDraftAbandoned()) {
             context.saveAsDraft();
-        }
-    }
-
-    private void distributeEvenly(List<SpawnerMobEntry> mobs) {
-        int count = mobs.size();
-        if (count == 0) return;
-
-        double base = Math.floor((100.0 / count) * 100.0) / 100.0;
-        double totalAssigned = base * count;
-        double remainder = TextUtil.roundChance(100.0 - totalAssigned);
-
-        for (int i = 0; i < count; i++) {
-            double c = base;
-            if (i == count - 1) {
-                c = TextUtil.roundChance(base + remainder);
-            }
-            mobs.get(i).setChance(c);
         }
     }
 }

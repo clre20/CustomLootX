@@ -180,7 +180,7 @@ public class PlayerInteractListener implements Listener {
             }
 
             boolean isNew = session.getOriginalName() == null;
-            WizardContext context = new WizardContext(plugin, player, lt, isNew, held, draftId, true);
+            WizardContext context = new WizardContext(plugin, player, lt, isNew, held, session.getOriginalName(), draftId, true);
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().send(player, "draft-loaded");
             context.openStep1();

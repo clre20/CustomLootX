@@ -457,7 +457,7 @@ public class VaultBlockListener implements Listener {
             }
 
             boolean isExisting = session.getOriginalName() != null;
-            VaultWizardContext context = new VaultWizardContext(plugin, player, vt, held, isExisting, draftId, true);
+            VaultWizardContext context = new VaultWizardContext(plugin, player, vt, held, isExisting, session.getOriginalName(), draftId, true);
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().send(player, "draft-loaded");
             new VaultWizardStep1Gui(context).open();
@@ -498,7 +498,7 @@ public class VaultBlockListener implements Listener {
             );
         }
 
-        VaultWizardContext context = new VaultWizardContext(plugin, player, template, held, isExisting);
+        VaultWizardContext context = new VaultWizardContext(plugin, player, template, held, isExisting, isExisting ? templateName : null, null, false);
         new VaultWizardStep1Gui(context).open();
     }
 

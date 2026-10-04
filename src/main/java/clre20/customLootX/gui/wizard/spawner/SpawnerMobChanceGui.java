@@ -138,10 +138,10 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
             case 16 -> adjustChance(1.0, player);
             case 17 -> adjustChance(10.0, player);
             case 18 -> {
-                // 返回怪物池
+                // 返回隨機池機率
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 context.setTransitioning(true);
-                new SpawnerWizardStep2MobGui(context, 1).open();
+                new SpawnerWizardStep4RandomChanceGui(context).open();
                 context.setTransitioning(false);
             }
             case 21 -> {
@@ -196,7 +196,7 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
                     context.getTemplate().getMobPool().remove(targetMob);
                     context.getPlugin().getConfigManager().playSound(player, "success");
                     context.setTransitioning(true);
-                    new SpawnerWizardStep2MobGui(context, 1).open();
+                    new SpawnerWizardStep4RandomChanceGui(context).open();
                     context.setTransitioning(false);
                 } else {
                     context.getPlugin().getConfigManager().playSound(player, "error");

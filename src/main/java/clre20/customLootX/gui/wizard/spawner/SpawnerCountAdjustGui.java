@@ -201,7 +201,7 @@ public class SpawnerCountAdjustGui extends CustomGuiHolder {
                 if (setting == TargetSetting.ROLL_COUNT) {
                     new SpawnerWizardStep4CooldownGui(context).open();
                 } else {
-                    new SpawnerWizardStep3WavesGui(context).open();
+                    new SpawnerWizardStep2WavesGui(context).open();
                 }
                 context.setTransitioning(false);
             }

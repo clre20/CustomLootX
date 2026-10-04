@@ -40,6 +40,9 @@ public class SpawnerBattleSession {
 
     private int mobsSpawnedCount = 0;
     private int mobsKilledCount = 0;
+    private int currentWaveIndex = 0;
+    private boolean currentWaveSpawned = false;
+    private long lastWaveClearedTimeMs = 0L;
     private long lastSpawnTimeMs = 0L;
     private final long battleStartTimeMs;
     private long lastPlayerSeenTimeMs;
@@ -74,7 +77,7 @@ public class SpawnerBattleSession {
             tsState.setOminous(template.isOminous());
             for (UUID uuid : participatingPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline()) {
+                if (p != null && p.isOnline() && p.getWorld().equals(spawnerLocation.getWorld())) {
                     tsState.startTrackingPlayer(p);
                 }
             }
@@ -101,7 +104,7 @@ public class SpawnerBattleSession {
         }
 
         // 立即觸發首波怪物的生成
-        spawnWave();
+        spawnCurrentWave();
     }
 
     /**
@@ -137,7 +140,7 @@ public class SpawnerBattleSession {
             boolean trackingChanged = false;
             for (UUID uuid : participatingPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline()) {
+                if (p != null && p.isOnline() && p.getWorld().equals(world)) {
                     if (!tsState.isTrackingPlayer(p)) {
                         tsState.startTrackingPlayer(p);
                         trackingChanged = true;
@@ -185,30 +188,54 @@ public class SpawnerBattleSession {
             }
         }
 
-        // 3. 檢查是否已完成目標
-        if (mobsKilledCount >= template.getTotalMobs() || (mobsSpawnedCount >= template.getTotalMobs() && activeMobUuids.isEmpty())) {
-            finishVictory();
-            return;
-        }
+        List<List<String>> waves = template.getWaves();
+        long delayMs = template.getSpawnDelaySeconds() * 1000L;
 
-        // 4. 是否可以繼續生成下一波
-        if (mobsSpawnedCount < template.getTotalMobs() && activeMobUuids.size() < template.getSimultaneousMobs()) {
-            long delayMs = template.getSpawnDelaySeconds() * 1000L;
-            if (now - lastSpawnTimeMs >= delayMs) {
-                spawnWave();
+        if (template.isWaitWaveCleared()) {
+            // 模式 A (開啟): 必須等待場上怪物全數肅清，才倒數間隔進入下一波
+            if (currentWaveSpawned && activeMobUuids.isEmpty()) {
+                if (currentWaveIndex >= waves.size() - 1) {
+                    finishVictory();
+                    return;
+                }
+                currentWaveIndex++;
+                currentWaveSpawned = false;
+                lastWaveClearedTimeMs = now;
+            }
+
+            if (!currentWaveSpawned && currentWaveIndex < waves.size()) {
+                if (now - lastWaveClearedTimeMs >= delayMs) {
+                    spawnCurrentWave();
+                }
+            }
+        } else {
+            // 模式 B (關閉): 不等場上全滅，生成間隔秒數一到立即出下一輪
+            if (currentWaveIndex >= waves.size() - 1 && currentWaveSpawned && activeMobUuids.isEmpty()) {
+                finishVictory();
+                return;
+            }
+
+            if (currentWaveIndex < waves.size() - 1) {
+                if (now - lastSpawnTimeMs >= delayMs) {
+                    currentWaveIndex++;
+                    spawnCurrentWave();
+                }
             }
         }
 
-        // 5. 每秒向參戰玩家推播進度 Action Bar (依各生怪磚獨立設定)
+        // 6. 每秒向參戰玩家推播進度 Action Bar (依各生怪磚獨立設定)
         if (template.isShowActionBar()) {
             String format = plugin.getConfig().getString("settings.spawner.actionbar-format", "&e試煉戰鬥中: &a%killed%/%total% &7(場上: &f%active% &7隻)");
+            int displayWave = Math.min(waves.size(), currentWaveIndex + 1);
             String progressMsg = format
                     .replace("%killed%", String.valueOf(mobsKilledCount))
                     .replace("%total%", String.valueOf(template.getTotalMobs()))
-                    .replace("%active%", String.valueOf(activeMobUuids.size()));
+                    .replace("%active%", String.valueOf(activeMobUuids.size()))
+                    .replace("%wave%", String.valueOf(displayWave))
+                    .replace("%maxwave%", String.valueOf(waves.size()));
             for (UUID uuid : participatingPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline() && p.getLocation().distanceSquared(spawnerLocation) <= maxDistanceSq) {
+                if (p != null && p.isOnline() && p.getWorld().equals(spawnerLocation.getWorld()) && p.getLocation().distanceSquared(spawnerLocation) <= maxDistanceSq) {
                     p.sendActionBar(TextUtil.parse(progressMsg));
                 }
             }
@@ -216,23 +243,29 @@ public class SpawnerBattleSession {
     }
 
     /**
-     * 生成一波怪 (直到達到同時上限或總怪數上限)
+     * 生成當前波次的所有怪物
      */
-    private void spawnWave() {
+    private void spawnCurrentWave() {
         World world = spawnerLocation.getWorld();
         if (world == null) return;
 
-        int canSpawn = Math.min(
-                template.getSimultaneousMobs() - activeMobUuids.size(),
-                template.getTotalMobs() - mobsSpawnedCount
-        );
+        List<List<String>> waves = template.getWaves();
+        if (waves.isEmpty() || currentWaveIndex >= waves.size()) {
+            return;
+        }
 
-        if (canSpawn <= 0) return;
+        List<String> waveMobs = waves.get(currentWaveIndex);
+        if (waveMobs == null || waveMobs.isEmpty()) {
+            currentWaveIndex++;
+            currentWaveSpawned = false;
+            return;
+        }
 
+        currentWaveSpawned = true;
         lastSpawnTimeMs = System.currentTimeMillis();
 
-        for (int i = 0; i < canSpawn; i++) {
-            clre20.customLootX.model.SpawnerMobEntry chosenEntry = template.rollSingleMob();
+        for (int i = 0; i < waveMobs.size(); i++) {
+            clre20.customLootX.model.SpawnerMobEntry chosenEntry = template.getMobEntryForWave(currentWaveIndex, i);
             Location spawnLoc = findSafeSpawnLocation(world, chosenEntry.getPreviewEntityType());
             if (spawnLoc == null) {
                 spawnLoc = spawnerLocation.clone().add(0.5, 1.0, 0.5);

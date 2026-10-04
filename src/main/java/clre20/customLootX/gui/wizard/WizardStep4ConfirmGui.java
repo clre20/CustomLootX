@@ -262,21 +262,32 @@ public class WizardStep4ConfirmGui extends CustomGuiHolder {
         // Slot 31: Abandon draft
         if (slot == 31) {
             context.setDraftAbandoned(true);
+            if (!context.isNew()) {
+                context.getPlugin().getConfigManager().send(player, "save-cancelled");
+                context.getPlugin().getConfigManager().playSound(player, "click");
+                player.closeInventory();
+                return;
+            }
             if (context.getDraftId() != null) {
                 context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.SUSPICIOUS, context.getDraftId());
+            }
+            if (context.getOriginalName() != null) {
+                context.getPlugin().getDraftManager().deleteDraftByOriginalName(clre20.customLootX.model.DraftType.SUSPICIOUS, context.getOriginalName());
             }
             ItemStack held = context.getItemInHand();
             if (held == null || held.getType().isAir()) {
                 held = player.getInventory().getItemInMainHand();
             }
-            context.getPlugin().getItemManager().removeDraft(held);
-            String origName = context.getOriginalName();
-            if (origName != null && context.getPlugin().getTemplateManager().hasTemplate(origName)) {
-                LootTemplate origT = context.getPlugin().getTemplateManager().getTemplate(origName);
-                context.getPlugin().getItemManager().updateHoldingItem(player, origT);
-            } else {
-                ItemStack blank = context.getPlugin().getItemManager().createBlankItem(context.getTemplate().getType());
-                player.getInventory().setItemInMainHand(blank);
+            if (context.getPlugin().getItemManager().isCustomLootItem(held)) {
+                context.getPlugin().getItemManager().removeDraft(held);
+                String origName = context.getOriginalName();
+                if (origName != null && context.getPlugin().getTemplateManager().hasTemplate(origName)) {
+                    LootTemplate origT = context.getPlugin().getTemplateManager().getTemplate(origName);
+                    context.getPlugin().getItemManager().updateHoldingItem(player, origT);
+                } else {
+                    ItemStack blank = context.getPlugin().getItemManager().createBlankItem(context.getTemplate().getType());
+                    player.getInventory().setItemInMainHand(blank);
+                }
             }
             context.getPlugin().getConfigManager().send(player, "save-cancelled");
             context.getPlugin().getConfigManager().playSound(player, "click");
@@ -309,6 +320,10 @@ public class WizardStep4ConfirmGui extends CustomGuiHolder {
                 // 刪除草稿檔案
                 if (context.getDraftId() != null) {
                     context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.SUSPICIOUS, context.getDraftId());
+                }
+                context.getPlugin().getDraftManager().deleteDraftByOriginalName(clre20.customLootX.model.DraftType.SUSPICIOUS, template.getName());
+                if (origName != null) {
+                    context.getPlugin().getDraftManager().deleteDraftByOriginalName(clre20.customLootX.model.DraftType.SUSPICIOUS, origName);
                 }
                 // 移除手持物品草稿標記並更新正式 Lore
                 ItemStack held = player.getInventory().getItemInMainHand();

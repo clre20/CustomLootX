@@ -63,73 +63,75 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
         );
         inventory.setItem(5, createButton(Material.NAME_TAG, step1NameName, step1NameLore));
 
-        // 第二排 (步驟二、三、四): 怪物、波次、冷卻
+        // 第二排: 順序、波次、冷卻
         List<clre20.customLootX.model.SpawnerMobEntry> mobs = template.getMobPool();
-        String step2MobName;
-        List<String> step2MobLore = new ArrayList<>();
-        if (mobs.size() == 1) {
-            clre20.customLootX.model.SpawnerMobEntry single = mobs.get(0);
-            step2MobName = "&e【步驟二】生成怪物: &c" + single.getDisplayName();
-            step2MobLore.add("&7代號: &f" + single.getMobId());
-            step2MobLore.add("&7類型: " + (single.isMythic() ? "&dMythicMob 自訂怪物" : "&a原版生物"));
-            step2MobLore.add("&7生成機率: &a100.00%");
-        } else {
-            step2MobName = "&e【步驟二】怪物池: &c" + mobs.size() + " 種怪物 (機率分配)";
-            step2MobLore.add("&7怪物生成池分佈:");
-            int showMobs = Math.min(mobs.size(), 4);
-            for (int i = 0; i < showMobs; i++) {
-                clre20.customLootX.model.SpawnerMobEntry entry = mobs.get(i);
-                step2MobLore.add(" &7▪ &f" + entry.getDisplayName() + ": &a" + String.format("%.2f%%", entry.getChance()));
-            }
-            if (mobs.size() > 4) {
-                step2MobLore.add(" &7▪ ...以及其他 &f" + (mobs.size() - 4) + " &7種怪物");
-            }
-        }
-        if (template.isDisplayCycle()) {
-            step2MobLore.add("&7生怪磚籠內 3D 旋轉預覽: &b🔄 循環輪替 &7(輪播怪物池所有生物)");
-        } else {
-            String mobName = TextUtil.getMobDisplayName(template.getSpawnedType());
-            if (template.getDisplayMobId() != null) {
-                for (clre20.customLootX.model.SpawnerMobEntry e : mobs) {
-                    if (e.getMobId().equalsIgnoreCase(template.getDisplayMobId())) {
-                        mobName = e.getDisplayName();
-                        if (e.isMythic()) {
-                            mobName += " &7(基底: " + TextUtil.getMobDisplayName(e.getPreviewEntityType()) + ")";
+        int total = template.getTotalMobs();
+        List<List<String>> waves = template.getWaves();
+        boolean hasRandom = template.hasRandomInSequence();
+        String step4MobName = "&e【步驟四】怪物波次與排程 &7(共 " + waves.size() + " 輪 / " + total + " 隻)";
+        List<String> step4MobLore = new ArrayList<>();
+
+        step4MobLore.add("&7波次排程預覽:");
+        int previewWaves = Math.min(waves.size(), 3);
+        for (int w = 0; w < previewWaves; w++) {
+            List<String> wave = waves.get(w);
+            int waveSize = (wave != null) ? wave.size() : 0;
+            step4MobLore.add(" &6第 " + (w + 1) + " 輪 &7(" + waveSize + " 隻):");
+            int mobPreview = Math.min(waveSize, 3);
+            for (int m = 0; m < mobPreview; m++) {
+                String k = wave.get(m);
+                if (k == null || "RANDOM".equalsIgnoreCase(k.trim())) {
+                    step4MobLore.add("   &7▪ 第 " + (m + 1) + " 隻: &d🎲 隨機抽取");
+                } else {
+                    String dName = k;
+                    for (clre20.customLootX.model.SpawnerMobEntry e : mobs) {
+                        if (e.getMobId().equalsIgnoreCase(k) || ("mm:" + e.getMobId()).equalsIgnoreCase(k)) {
+                            dName = e.getDisplayName();
+                            break;
                         }
-                        break;
                     }
+                    step4MobLore.add("   &7▪ 第 " + (m + 1) + " 隻: &f" + dName);
                 }
             }
-            step2MobLore.add("&7生怪磚籠內 3D 旋轉預覽: &a" + mobName + " &e[固定顯示]");
+            if (waveSize > 3) {
+                step4MobLore.add("   &7▪ ...以及其他 &f" + (waveSize - 3) + " &7隻");
+            }
         }
-        step2MobLore.add("&7");
-        step2MobLore.add("&e點擊可返回步驟二修改");
-        inventory.setItem(11, createButton(Material.SPAWNER, step2MobName, step2MobLore));
+        if (waves.size() > 3) {
+            step4MobLore.add(" &7▪ ...以及其餘 &e" + (waves.size() - 3) + " &7輪");
+        }
+        if (!hasRandom) {
+            step4MobLore.add("&a✔ 全為固定怪物 (免設機率)");
+        } else {
+            step4MobLore.add("&e含隨機格，隨機池總機率: &a100.00%");
+        }
+        step4MobLore.add("&7");
+        step4MobLore.add("&e點擊可返回步驟四看板修改順序");
+        inventory.setItem(11, createButton(Material.SPAWNER, step4MobName, step4MobLore));
 
-        String step3WaveName = "&6【步驟三】波次配置";
-        List<String> step3WaveLore = List.of(
-                "&7總共擊殺目標: &a" + template.getTotalMobs() + " &7隻",
-                "&7同時存活上限: &a" + template.getSimultaneousMobs() + " &7隻",
+        String step2WaveName = "&6【步驟二】戰鬥環境設定";
+        List<String> step2WaveLore = List.of(
                 "&7生成冷卻間隔: &a" + template.getSpawnDelaySeconds() + " &7秒",
+                "&7等待波次肅清: " + (template.isWaitWaveCleared() ? "&a✔ 是 (全滅才下一輪)" : "&c✖ 否 (時間到直接出怪)"),
                 "&7玩家感應距離: &a" + template.getPlayerRange() + " &7格",
                 "&7進度提示小字: " + (template.isShowActionBar() ? "&a✔ 開啟 (Action Bar)" : "&c✖ 關閉"),
                 "&7挑戰完成音效: " + (template.isVictorySoundEnabled() ? ("&a✔ 開啟 (" + template.getVictorySound() + ")") : "&c✖ 關閉"),
                 "&7",
-                "&e點擊可返回步驟三修改"
+                "&e點擊可返回步驟二修改"
         );
-        inventory.setItem(13, createButton(Material.IRON_SWORD, step3WaveName, step3WaveLore));
+        inventory.setItem(13, createButton(Material.CLOCK, step2WaveName, step2WaveLore));
 
         String modeDesc = template.getCooldownMode().getDisplay();
         String timeDesc = (template.getCooldownMode() == VaultCooldownMode.ONCE_PER_PLAYER)
                 ? "&7(終生一次)"
                 : ("&a" + template.getCooldownMinutes() + " &7分鐘");
-        String step4CooldownName = "&6【步驟四】冷卻與出貨";
+        String step4CooldownName = "&6【步驟四-2】冷卻與出貨";
         List<String> step4CooldownLore = List.of(
                 "&7冷卻模式: &e" + modeDesc,
                 "&7冷卻時間: " + timeDesc,
                 "&7獲勝出貨數量: &a" + template.getRollCount() + " &7件",
                 "&7",
-                "&e點擊可返回步驟四修改"
+                "&e點擊可返回步驟四-2修改"
         );
         inventory.setItem(15, createButton(Material.GOLD_INGOT, step4CooldownName, step4CooldownLore));
 
@@ -215,7 +217,7 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
             String notReadyName = "&c✖ 無法儲存 (機率未平衡至 100%)";
             List<String> notReadyLore = new ArrayList<>();
             if (!isMobsValid) {
-                notReadyLore.add("&c【步驟二】怪物池總機率: &e" + String.format("%.2f%%", template.getTotalMobChance()) + " &7(必須為 100.00%)");
+                notReadyLore.add("&c【步驟四】隨機池總機率: &e" + String.format("%.2f%%", template.getTotalMobChance()) + " &7(必須為 100.00%)");
             }
             if (!isRewardsValid) {
                 notReadyLore.add("&c【步驟五】獎勵池總機率: &e" + String.format("%.2f%%", template.getTotalChance()) + " &7(必須為 100.00%)");
@@ -256,12 +258,12 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
         } else if (slot == 11) {
             context.getPlugin().getConfigManager().playSound(player, "click");
             context.setTransitioning(true);
-            new SpawnerWizardStep2MobGui(context, 1).open();
+            new SpawnerWizardStep4SequenceGui(context).open();
             context.setTransitioning(false);
         } else if (slot == 13) {
             context.getPlugin().getConfigManager().playSound(player, "click");
             context.setTransitioning(true);
-            new SpawnerWizardStep3WavesGui(context).open();
+            new SpawnerWizardStep2WavesGui(context).open();
             context.setTransitioning(false);
         } else if (slot == 15) {
             context.getPlugin().getConfigManager().playSound(player, "click");
@@ -274,24 +276,35 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
             new SpawnerWizardStep5LootGui(context, 1).open();
             context.setTransitioning(false);
         } else if (slot == 31) {
-            // 放棄變更並清除草稿
+            // 放棄變更
             context.setDraftAbandoned(true);
+            if (context.isEditingExisting()) {
+                context.getPlugin().getConfigManager().send(player, "save-cancelled");
+                context.getPlugin().getConfigManager().playSound(player, "click");
+                player.closeInventory();
+                return;
+            }
             if (context.getDraftId() != null) {
                 context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.SPAWNER, context.getDraftId());
+            }
+            if (context.getOriginalName() != null) {
+                context.getPlugin().getDraftManager().deleteDraftByOriginalName(clre20.customLootX.model.DraftType.SPAWNER, context.getOriginalName());
             }
             ItemStack held = context.getItemInHand();
             if (held == null || held.getType().isAir()) {
                 held = player.getInventory().getItemInMainHand();
             }
-            context.getPlugin().getItemManager().removeDraft(held);
-            String origName = context.getOriginalName();
-            if (origName != null && context.getPlugin().getSpawnerTemplateManager().getTemplate(origName) != null) {
-                SpawnerTemplate origT = context.getPlugin().getSpawnerTemplateManager().getTemplate(origName);
-                ItemStack configured = context.getPlugin().getItemManager().createTemplateSpawnerItem(origT, held.getAmount());
-                player.getInventory().setItemInMainHand(configured);
-            } else {
-                ItemStack blank = context.getPlugin().getItemManager().createBlankSpawnerItem(context.getTemplate().isOminous());
-                player.getInventory().setItemInMainHand(blank);
+            if (context.getPlugin().getItemManager().isCustomSpawnerItem(held)) {
+                context.getPlugin().getItemManager().removeDraft(held);
+                String origName = context.getOriginalName();
+                if (origName != null && context.getPlugin().getSpawnerTemplateManager().getTemplate(origName) != null) {
+                    SpawnerTemplate origT = context.getPlugin().getSpawnerTemplateManager().getTemplate(origName);
+                    ItemStack configured = context.getPlugin().getItemManager().createTemplateSpawnerItem(origT, held.getAmount());
+                    player.getInventory().setItemInMainHand(configured);
+                } else {
+                    ItemStack blank = context.getPlugin().getItemManager().createBlankSpawnerItem(context.getTemplate().isOminous());
+                    player.getInventory().setItemInMainHand(blank);
+                }
             }
             context.getPlugin().getConfigManager().send(player, "save-cancelled");
             context.getPlugin().getConfigManager().playSound(player, "click");
@@ -322,6 +335,10 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
                 // 刪除草稿檔案
                 if (context.getDraftId() != null) {
                     context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.SPAWNER, context.getDraftId());
+                }
+                context.getPlugin().getDraftManager().deleteDraftByOriginalName(clre20.customLootX.model.DraftType.SPAWNER, template.getName());
+                if (context.getOriginalName() != null) {
+                    context.getPlugin().getDraftManager().deleteDraftByOriginalName(clre20.customLootX.model.DraftType.SPAWNER, context.getOriginalName());
                 }
                 // 更新玩家手持物品並移除草稿標籤
                 ItemStack held = player.getInventory().getItemInMainHand();

@@ -342,7 +342,15 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
                 plugin.getConfigManager().playSound(player, "error");
                 return;
             }
-            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, template.cloneTemplate(), null, true);
+
+            clre20.customLootX.model.DraftSession draft = plugin.getDraftManager().findDraftByOriginalName(clre20.customLootX.model.DraftType.SPAWNER, name);
+            SpawnerWizardContext context;
+            if (draft != null && draft.getTemplateData() instanceof SpawnerTemplate dt) {
+                context = new SpawnerWizardContext(plugin, player, dt, null, true, name, draft.getDraftId(), true);
+                plugin.getConfigManager().send(player, "draft-loaded");
+            } else {
+                context = new SpawnerWizardContext(plugin, player, template.cloneTemplate(), null, true, name, null, false);
+            }
             new SpawnerWizardStep1Gui(context).open();
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().log("cmd-edit-spawner", "%player%", player.getName(), "%label%", label, "%name%", name);
@@ -353,7 +361,15 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
                 plugin.getConfigManager().playSound(player, "error");
                 return;
             }
-            VaultWizardContext context = new VaultWizardContext(plugin, player, template.cloneTemplate(), null, true);
+
+            clre20.customLootX.model.DraftSession draft = plugin.getDraftManager().findDraftByOriginalName(clre20.customLootX.model.DraftType.VAULT, name);
+            VaultWizardContext context;
+            if (draft != null && draft.getTemplateData() instanceof VaultTemplate vt) {
+                context = new VaultWizardContext(plugin, player, vt, null, true, name, draft.getDraftId(), true);
+                plugin.getConfigManager().send(player, "draft-loaded");
+            } else {
+                context = new VaultWizardContext(plugin, player, template.cloneTemplate(), null, true, name, null, false);
+            }
             new VaultWizardStep1Gui(context).open();
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().log("cmd-edit-vault", "%player%", player.getName(), "%label%", label, "%name%", name);
@@ -364,7 +380,15 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
                 plugin.getConfigManager().playSound(player, "error");
                 return;
             }
-            WizardContext context = new WizardContext(plugin, player, template.cloneTemplate(), false);
+
+            clre20.customLootX.model.DraftSession draft = plugin.getDraftManager().findDraftByOriginalName(clre20.customLootX.model.DraftType.SUSPICIOUS, name);
+            WizardContext context;
+            if (draft != null && draft.getTemplateData() instanceof LootTemplate lt) {
+                context = new WizardContext(plugin, player, lt, false, null, draft.getDraftId(), true);
+                plugin.getConfigManager().send(player, "draft-loaded");
+            } else {
+                context = new WizardContext(plugin, player, template.cloneTemplate(), false, null, null, false);
+            }
             context.openStep1();
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().log("cmd-edit", "%player%", player.getName(), "%label%", label, "%name%", name);

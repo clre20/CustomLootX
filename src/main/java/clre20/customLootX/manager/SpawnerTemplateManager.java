@@ -174,9 +174,46 @@ public class SpawnerTemplateManager {
         float victorySoundVolume = (float) yaml.getDouble("victory-sound.volume", 1.0);
         float victorySoundPitch = (float) yaml.getDouble("victory-sound.pitch", 1.2);
 
+        String spawnModeStr = yaml.getString("spawn-mode", "SEQUENCE");
+        clre20.customLootX.model.SpawnerSpawnMode spawnMode = clre20.customLootX.model.SpawnerSpawnMode.fromString(spawnModeStr);
+
+        List<List<String>> waves = new ArrayList<>();
+        if (yaml.isList("waves")) {
+            List<?> rawWaves = yaml.getList("waves");
+            if (rawWaves != null) {
+                for (Object obj : rawWaves) {
+                    if (obj instanceof List<?> l) {
+                        List<String> w = new ArrayList<>();
+                        for (Object o : l) {
+                            if (o != null) w.add(String.valueOf(o));
+                        }
+                        waves.add(w);
+                    }
+                }
+            }
+        }
+        if (waves.isEmpty()) {
+            List<String> spawnSequence = yaml.getStringList("spawn-sequence");
+            int sim = Math.max(1, simultaneousMobs);
+            if (!spawnSequence.isEmpty()) {
+                List<String> cur = new ArrayList<>();
+                for (String s : spawnSequence) {
+                    cur.add(s);
+                    if (cur.size() >= sim) {
+                        waves.add(new ArrayList<>(cur));
+                        cur.clear();
+                    }
+                }
+                if (!cur.isEmpty()) waves.add(cur);
+            }
+        }
+
+        boolean waitWaveCleared = yaml.getBoolean("wave.wait-wave-cleared", true);
+
         return new SpawnerTemplate(name, ominous, displayName, spawnedType, displayCycle, displayMobId,
-                mobPool, totalMobs, simultaneousMobs,
-                spawnDelaySeconds, playerRange, showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
+                mobPool, spawnMode, waves,
+                spawnDelaySeconds, playerRange, waitWaveCleared,
+                showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
                 mode, cooldownMinutes, rollCount, items);
     }
 
@@ -196,6 +233,14 @@ public class SpawnerTemplateManager {
             yaml.set("display-mob-id", template.getDisplayMobId());
         }
         yaml.set("spawned-type", template.getSpawnedType().name());
+        yaml.set("spawn-mode", "SEQUENCE");
+        yaml.set("spawn-sequence", template.getSpawnSequence());
+
+        List<List<String>> waveData = new ArrayList<>();
+        for (List<String> w : template.getWaves()) {
+            waveData.add(new ArrayList<>(w));
+        }
+        yaml.set("waves", waveData);
 
         List<Map<String, Object>> mobList = new ArrayList<>();
         for (SpawnerMobEntry entry : template.getMobPool()) {
@@ -214,6 +259,7 @@ public class SpawnerTemplateManager {
         yaml.set("wave.simultaneous-mobs", template.getSimultaneousMobs());
         yaml.set("wave.spawn-delay-seconds", template.getSpawnDelaySeconds());
         yaml.set("wave.player-range", template.getPlayerRange());
+        yaml.set("wave.wait-wave-cleared", template.isWaitWaveCleared());
         yaml.set("show-actionbar", template.isShowActionBar());
         yaml.set("victory-sound.enabled", template.isVictorySoundEnabled());
         yaml.set("victory-sound.sound", template.getVictorySound());
@@ -752,9 +798,7 @@ public class SpawnerTemplateManager {
             EntityType targetType = currentEntry.getPreviewEntityType();
             if (targetType == null) continue;
 
-            if (TrialSpawnerNmsUtil.setSpawnerMob(block, targetType, template.isOminous(), plugin.getLogger())) {
-                plugin.logConsole("&d[試煉生怪磚·輪播]&7 " + locKey + " &8➜ &7輪換展示: &e" + targetType.name() + " &8(&7第 &f" + (index + 1) + "/" + pool.size() + "&7 隻&8)");
-            }
+            TrialSpawnerNmsUtil.setSpawnerMob(block, targetType, template.isOminous(), plugin.getLogger());
         }
     }
 
@@ -790,7 +834,7 @@ public class SpawnerTemplateManager {
                 GameMode gm = p.getGameMode();
                 if (gm != GameMode.SURVIVAL && gm != GameMode.ADVENTURE) continue;
 
-                if (p.getLocation().distanceSquared(loc) <= rangeSq) {
+                if (p.getWorld().equals(loc.getWorld()) && p.getLocation().distanceSquared(loc) <= rangeSq) {
                     // 檢查玩家冷卻資格
                     if (checkCooldownStatus(loc, p.getUniqueId(), template) == 0) {
                         eligiblePlayers.add(p);

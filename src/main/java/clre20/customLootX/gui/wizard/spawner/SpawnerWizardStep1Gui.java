@@ -91,11 +91,11 @@ public class SpawnerWizardStep1Gui extends CustomGuiHolder {
 
         // Slot 26: 下一步按鈕
         if (hasName) {
-            String nextName = context.getPlugin().getConfigManager().getText("gui.spawner.step1.next-ready-name", "&a下一步 ➜ &f(選擇生成怪物)");
+            String nextName = context.getPlugin().getConfigManager().getText("gui.spawner.step1.next-ready-name", "&a下一步 ➜ &f(波次與數量設定)");
             List<String> nextLore = context.getPlugin().getConfigManager().getStringList(
                     "gui.spawner.step1.next-ready-lore",
                     List.of(
-                            "&7前往 [步驟 2/6] 選擇試煉生成的怪物種類",
+                            "&7前往 [步驟 2/6] 設定波次數量、規模與生成間隔",
                             "&a點擊前往下一步"
                     )
             );
@@ -182,7 +182,7 @@ public class SpawnerWizardStep1Gui extends CustomGuiHolder {
             context.getPlugin().getConfigManager().playSound(player, "click");
             player.closeInventory();
         } else if (slot == 26) {
-            // 下一步 (前往步驟二：選擇生成怪物種類)
+            // 下一步 (前往步驟二：波次與數量設定)
             String name = context.getTemplate().getName();
             if (name == null || name.trim().isEmpty() || name.equalsIgnoreCase("<未設定>")) {
                 context.getPlugin().getConfigManager().send(player, "name-not-set");
@@ -191,7 +191,7 @@ public class SpawnerWizardStep1Gui extends CustomGuiHolder {
             }
             context.getPlugin().getConfigManager().playSound(player, "click");
             context.setTransitioning(true);
-            new SpawnerWizardStep2MobGui(context, 1).open();
+            new SpawnerWizardStep2WavesGui(context).open();
             context.setTransitioning(false);
         }
     }
