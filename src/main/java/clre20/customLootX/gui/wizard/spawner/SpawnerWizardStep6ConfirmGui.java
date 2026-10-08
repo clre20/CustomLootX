@@ -124,7 +124,7 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
         String modeDesc = template.getCooldownMode().getDisplay();
         String timeDesc = (template.getCooldownMode() == VaultCooldownMode.ONCE_PER_PLAYER)
                 ? "&7(終生一次)"
-                : ("&a" + template.getCooldownMinutes() + " &7分鐘");
+                : ("&a" + TextUtil.formatTimeSeconds(template.getCooldownSeconds()));
         String step4CooldownName = "&6【步驟四-2】冷卻與出貨";
         List<String> step4CooldownLore = List.of(
                 "&7冷卻模式: &e" + modeDesc,

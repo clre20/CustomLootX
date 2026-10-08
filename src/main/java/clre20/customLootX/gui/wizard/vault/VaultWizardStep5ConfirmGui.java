@@ -95,7 +95,7 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
         String modeDesc = template.getCooldownMode().getDisplay();
         String timeDesc = (template.getCooldownMode() == VaultCooldownMode.ONCE_PER_PLAYER)
                 ? "&7(終生一次)"
-                : ("&a" + template.getCooldownMinutes() + " &7分鐘");
+                : ("&a" + TextUtil.formatTimeSeconds(template.getCooldownSeconds()));
         String step3ModeName = context.getPlugin().getConfigManager().getText("gui.vault.step5.step3-mode-name", "&6【步驟三】冷卻機制: &e%mode%", "%mode%", modeDesc);
         List<String> step3ModeLore = context.getPlugin().getConfigManager().getStringList(
                 "gui.vault.step4.step2-mode-lore",

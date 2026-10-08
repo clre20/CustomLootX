@@ -33,16 +33,17 @@ public class SpawnerTemplate {
     private float victorySoundVolume = 1.0f;
     private float victorySoundPitch = 1.2f;
     private VaultCooldownMode cooldownMode;
-    private int cooldownMinutes;
+    private int cooldownSeconds;
     private int rollCount;
+    private String broadcastMessage;
     private List<LootItem> rewards;
 
     public SpawnerTemplate(String name, boolean ominous, String displayName, EntityType spawnedType,
                            int totalMobs, int simultaneousMobs, int spawnDelaySeconds, int playerRange,
                            VaultCooldownMode cooldownMode, int cooldownMinutes, int rollCount,
                            List<LootItem> rewards) {
-        this(name, ominous, displayName, spawnedType, null, totalMobs, simultaneousMobs,
-                spawnDelaySeconds, playerRange, true, cooldownMode, cooldownMinutes, rollCount, rewards);
+        this(name, ominous, displayName, spawnedType, (List<SpawnerMobEntry>) null, totalMobs, simultaneousMobs,
+                spawnDelaySeconds, playerRange, cooldownMode, cooldownMinutes, rollCount, rewards);
     }
 
     public SpawnerTemplate(String name, boolean ominous, String displayName, EntityType spawnedType,
@@ -135,6 +136,21 @@ public class SpawnerTemplate {
                            float victorySoundVolume, float victorySoundPitch,
                            VaultCooldownMode cooldownMode, int cooldownMinutes, int rollCount,
                            List<LootItem> rewards) {
+        this(name, ominous, displayName, spawnedType, displayCycle, displayMobId, mobPool,
+                spawnMode, waves, spawnDelaySeconds, playerRange, waitWaveCleared,
+                showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
+                cooldownMode, cooldownMinutes, rollCount, rewards, null);
+    }
+
+    public SpawnerTemplate(String name, boolean ominous, String displayName, EntityType spawnedType,
+                           boolean displayCycle, String displayMobId,
+                           List<SpawnerMobEntry> mobPool,
+                           SpawnerSpawnMode spawnMode, List<List<String>> waves,
+                           int spawnDelaySeconds, int playerRange, boolean waitWaveCleared,
+                           boolean showActionBar, boolean victorySoundEnabled, String victorySound,
+                           float victorySoundVolume, float victorySoundPitch,
+                           VaultCooldownMode cooldownMode, int cooldownMinutes, int rollCount,
+                           List<LootItem> rewards, String broadcastMessage) {
         this.name = name;
         this.ominous = ominous;
         this.displayName = (displayName == null || displayName.isEmpty()) ? name : displayName;
@@ -174,9 +190,10 @@ public class SpawnerTemplate {
         this.victorySoundVolume = Math.max(0.1f, Math.min(2.0f, victorySoundVolume));
         this.victorySoundPitch = Math.max(0.5f, Math.min(2.0f, victorySoundPitch));
         this.cooldownMode = (cooldownMode == null) ? VaultCooldownMode.PLAYER_COOLDOWN : cooldownMode;
-        this.cooldownMinutes = Math.max(1, cooldownMinutes);
+        this.cooldownSeconds = Math.max(1, cooldownMinutes);
         this.rollCount = Math.max(1, Math.min(16, rollCount));
         this.rewards = (rewards == null) ? new ArrayList<>() : new ArrayList<>(rewards);
+        this.broadcastMessage = broadcastMessage;
     }
 
     private static List<List<String>> convertSequenceToWaves(List<String> sequence, int sim, List<SpawnerMobEntry> pool) {
@@ -399,12 +416,20 @@ public class SpawnerTemplate {
         this.cooldownMode = cooldownMode;
     }
 
+    public int getCooldownSeconds() {
+        return Math.max(1, cooldownSeconds);
+    }
+
+    public void setCooldownSeconds(int cooldownSeconds) {
+        this.cooldownSeconds = Math.max(1, cooldownSeconds);
+    }
+
     public int getCooldownMinutes() {
-        return Math.max(1, cooldownMinutes);
+        return Math.max(1, cooldownSeconds / 60);
     }
 
     public void setCooldownMinutes(int cooldownMinutes) {
-        this.cooldownMinutes = Math.max(1, cooldownMinutes);
+        this.cooldownSeconds = Math.max(1, cooldownMinutes * 60);
     }
 
     public int getRollCount() {
@@ -618,32 +643,93 @@ public class SpawnerTemplate {
         return Math.abs(getTotalChance() - 100.0) < 0.0001;
     }
 
+    public String getBroadcastMessage() {
+        return broadcastMessage;
+    }
+
+    public void setBroadcastMessage(String broadcastMessage) {
+        this.broadcastMessage = broadcastMessage;
+    }
+
     /**
-     * 從 100% 獎勵池中隨機抽取一項物品（若落空則返回 null）
+     * 從 100% 獎勵池中隨機抽取一項 LootItem
      */
-    public ItemStack rollSingleItem() {
+    public LootItem rollSingleLoot() {
+        return rollSingleLoot(null, null);
+    }
+
+    /**
+     * 從獎勵池中隨機抽取一項 LootItem（排除已達上限選項，照樣抽獎）
+     */
+    public LootItem rollSingleLoot(clre20.customLootX.CustomLootX plugin, java.util.UUID playerUuid) {
         if (rewards.isEmpty()) {
             return null;
         }
 
-        double random = ThreadLocalRandom.current().nextDouble() * 100.0;
+        // 過濾掉已達到出貨上限的選項
+        List<LootItem> available = new ArrayList<>();
+        double totalWeight = 0.0;
+        for (LootItem item : rewards) {
+            if (!item.isAir() && item.getItem() != null && plugin != null) {
+                if (plugin.getLootLimitManager().isLimitReached("spawner", this.name, item, playerUuid)) {
+                    continue; // 達到上限：沒有這個選項！
+                }
+            }
+            available.add(item);
+            totalWeight += item.getChance();
+        }
+
+        if (available.isEmpty() || totalWeight <= 0.0) {
+            return null;
+        }
+
+        double random = ThreadLocalRandom.current().nextDouble() * totalWeight;
         double cumulative = 0.0;
 
-        for (LootItem item : rewards) {
+        for (LootItem item : available) {
             cumulative += item.getChance();
             if (random < cumulative) {
-                if (item.isAir() || item.getItem() == null) {
-                    return null;
-                }
-                return item.getItem().clone();
+                return item;
             }
         }
 
-        LootItem last = rewards.get(rewards.size() - 1);
-        if (last.isAir() || last.getItem() == null) {
+        return available.get(available.size() - 1);
+    }
+
+    /**
+     * 依據 rollCount 抽取指定數量的獲勝獎勵物品物件清單（過濾掉落空者）
+     */
+    public List<LootItem> rollAllLootItems() {
+        return rollAllLootItems(null, null);
+    }
+
+    /**
+     * 依據 rollCount 抽取指定數量的獲勝獎勵物品物件清單（支援出貨上限防火牆攔截並照樣抽獎）
+     */
+    public List<LootItem> rollAllLootItems(clre20.customLootX.CustomLootX plugin, java.util.UUID playerUuid) {
+        List<LootItem> rolled = new ArrayList<>();
+        int count = getRollCount();
+        for (int i = 0; i < count; i++) {
+            LootItem loot = rollSingleLoot(plugin, playerUuid);
+            if (loot != null && !loot.isAir() && loot.getItem() != null) {
+                rolled.add(loot);
+                if (plugin != null) {
+                    plugin.getLootLimitManager().recordDrop("spawner", this.name, loot, playerUuid);
+                }
+            }
+        }
+        return rolled;
+    }
+
+    /**
+     * 從 100% 獎勵池中隨機抽取一項物品（若落空則返回 null）
+     */
+    public ItemStack rollSingleItem() {
+        LootItem loot = rollSingleLoot();
+        if (loot == null || loot.isAir() || loot.getItem() == null) {
             return null;
         }
-        return last.getItem().clone();
+        return loot.getItem().clone();
     }
 
     /**
@@ -651,12 +737,8 @@ public class SpawnerTemplate {
      */
     public List<ItemStack> rollAllItems() {
         List<ItemStack> rolled = new ArrayList<>();
-        int count = getRollCount();
-        for (int i = 0; i < count; i++) {
-            ItemStack item = rollSingleItem();
-            if (item != null && item.getType() != Material.AIR) {
-                rolled.add(item);
-            }
+        for (LootItem loot : rollAllLootItems()) {
+            rolled.add(loot.getItem().clone());
         }
         return rolled;
     }
@@ -698,9 +780,10 @@ public class SpawnerTemplate {
                 this.victorySoundVolume,
                 this.victorySoundPitch,
                 this.cooldownMode,
-                this.cooldownMinutes,
+                this.cooldownSeconds,
                 this.rollCount,
-                clonedRewards
+                clonedRewards,
+                this.broadcastMessage
         );
     }
 }

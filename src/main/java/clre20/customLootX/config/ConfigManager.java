@@ -76,7 +76,7 @@ public class ConfigManager {
         defaultFallbacks.put("template-save-failed", "&c儲存配置檔案失敗，請檢查主控台日誌！");
         defaultFallbacks.put("spawner-save-success", "&a已成功儲存試煉生怪磚配置: &e%name%&a！");
         defaultFallbacks.put("spawner-mode-switched", "&8[&6CustomLootX&8] &a已切換生怪磚生成模式為: &e%mode%&a！");
-        defaultFallbacks.put("spawner-in-cooldown", "&c此試煉生怪磚冷卻中！剩餘 &e%time% 秒&c後可再次挑戰。");
+        defaultFallbacks.put("spawner-in-cooldown", "&c此試煉生怪磚冷卻中！剩餘 &e%time% &c後可再次挑戰。");
         defaultFallbacks.put("spawner-already-completed", "&c你已經完成過此試煉挑戰，無法再次領取獲勝獎勵！");
         defaultFallbacks.put("spawner-ready-hint", "&a此試煉生怪磚已就緒！進入感應範圍即可啟動挑戰 (怪物: &e%mob%&a)！");
         defaultFallbacks.put("spawner-victory", "&a✔ 恭喜完成試煉挑戰！獲勝獎勵已噴發！");
@@ -223,6 +223,14 @@ public class ConfigManager {
         if (pattern == null || pattern.trim().isEmpty()) {
             return;
         }
+
+        // 自動向後相容：若現存 config.yml 的開獎日誌未包含戰利品佔位符，自動附加開出物品清單
+        if ("vault-unlock".equals(logKey) || "spawner-loot".equals(logKey)) {
+            if (!pattern.contains("%items%") && !pattern.contains("%item_names%") && !pattern.contains("%item%")) {
+                pattern = pattern + ": &e%items%";
+            }
+        }
+
         String msg = replace(pattern, placeholders);
         plugin.logConsole(msg);
     }
@@ -248,5 +256,74 @@ public class ConfigManager {
 
     public FileConfiguration getConfig() {
         return config;
+    }
+
+    /**
+     * 向全服廣播稀有獎勵抽中通告
+     */
+    public void broadcastReward(Player player, String templateType, String templateName, clre20.customLootX.model.LootItem loot, String templateBroadcastMessage) {
+        if (loot == null || !loot.isBroadcast() || loot.isAir() || loot.getItem() == null) {
+            return;
+        }
+
+        if (!config.getBoolean("broadcast.enabled", true)) {
+            return;
+        }
+
+        // 優先級 1: 物品在 yml 中獨立設定的通告文字 (可選)
+        String pattern = loot.getBroadcastMessage();
+        // 優先級 2: 該 template yml 頂層設定的通告文字 (可選)
+        if (pattern == null || pattern.trim().isEmpty()) {
+            pattern = templateBroadcastMessage;
+        }
+        // 優先級 3: config.yml 中各類型預設通告文字
+        if (pattern == null || pattern.trim().isEmpty()) {
+            pattern = config.getString("broadcast." + templateType);
+            if (pattern == null && defaultConfig != null) {
+                pattern = defaultConfig.getString("broadcast." + templateType);
+            }
+        }
+        // 優先級 4: 程式碼內建兜底預設文字
+        if (pattern == null || pattern.trim().isEmpty()) {
+            pattern = "&6[大獎通告]&e 恭喜玩家 &f%player%&e 於 &8[&e%name%&8]&e 幸運獲得稀有獎勵: &r%item%&e！";
+        }
+
+        org.bukkit.inventory.ItemStack item = loot.getItem();
+        String itemName = "";
+        if (item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+            try {
+                if (item.getItemMeta().displayName() != null) {
+                    itemName = TextUtil.toLegacyText(item.getItemMeta().displayName());
+                }
+            } catch (Throwable ignored) {
+            }
+            if (itemName == null || itemName.trim().isEmpty()) {
+                itemName = item.getItemMeta().getDisplayName();
+            }
+        }
+        if (itemName == null || itemName.trim().isEmpty()) {
+            itemName = TextUtil.getItemName(item);
+        }
+        if (item.getAmount() > 1) {
+            itemName = itemName + " &7x" + item.getAmount();
+        }
+
+        String playerName = player != null ? player.getName() : "玩家";
+        String tName = templateName != null ? templateName : "";
+        String chanceStr = TextUtil.formatPercent(loot.getChance());
+
+        String formatted = replace(pattern,
+                "%player%", playerName,
+                "%name%", tName,
+                "%item%", itemName,
+                "%amount%", String.valueOf(item.getAmount()),
+                "%chance%", chanceStr
+        );
+
+        Component comp = TextUtil.parse(formatted);
+        for (Player online : org.bukkit.Bukkit.getOnlinePlayers()) {
+            online.sendMessage(comp);
+        }
+        plugin.logConsole("&e[全服通告]&r " + formatted);
     }
 }

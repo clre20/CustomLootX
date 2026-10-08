@@ -147,7 +147,12 @@ public class SpawnerTemplateManager {
         } catch (Exception e) {
             mode = VaultCooldownMode.PLAYER_COOLDOWN;
         }
-        int cooldownMinutes = Math.max(1, yaml.getInt("cooldown.minutes", 15));
+        int cooldownSeconds;
+        if (yaml.contains("cooldown.seconds")) {
+            cooldownSeconds = Math.max(1, yaml.getInt("cooldown.seconds", 900));
+        } else {
+            cooldownSeconds = Math.max(1, yaml.getInt("cooldown.minutes", 15)) * 60;
+        }
         int rollCount = Math.max(1, yaml.getInt("roll-count", 3));
 
         List<LootItem> items = new ArrayList<>();
@@ -156,6 +161,9 @@ public class SpawnerTemplateManager {
             for (Map<?, ?> map : list) {
                 double chance = TextUtil.roundChance(map.containsKey("chance") ? ((Number) map.get("chance")).doubleValue() : 0.0);
                 boolean isAir = map.containsKey("is-air") && Boolean.parseBoolean(String.valueOf(map.get("is-air")));
+                boolean broadcast = map.containsKey("broadcast") && Boolean.parseBoolean(String.valueOf(map.get("broadcast")));
+                String itemBroadcastMsg = map.containsKey("broadcast-message") ? String.valueOf(map.get("broadcast-message")) : null;
+
                 ItemStack item = null;
                 if (!isAir && map.containsKey("item")) {
                     Object itemObj = map.get("item");
@@ -163,11 +171,20 @@ public class SpawnerTemplateManager {
                         item = is;
                     }
                 }
+                int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
+                LootItem lootItem;
                 if (isAir || item == null) {
-                    items.add(new LootItem(chance, true));
+                    lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                 } else {
-                    items.add(new LootItem(item, chance));
+                    lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                 }
+                lootItem.setLimitServerDaily(limitServerDaily);
+                lootItem.setLimitServerMonthly(limitServerMonthly);
+                lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                items.add(lootItem);
             }
         }
 
@@ -212,12 +229,13 @@ public class SpawnerTemplateManager {
         }
 
         boolean waitWaveCleared = yaml.getBoolean("wave.wait-wave-cleared", true);
+        String broadcastMessage = yaml.getString("broadcast-message", null);
 
         return new SpawnerTemplate(name, ominous, displayName, spawnedType, displayCycle, displayMobId,
                 mobPool, spawnMode, waves,
                 spawnDelaySeconds, playerRange, waitWaveCleared,
                 showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
-                mode, cooldownMinutes, rollCount, items);
+                mode, cooldownSeconds, rollCount, items, broadcastMessage);
     }
 
     public boolean saveTemplate(SpawnerTemplate template) {
@@ -269,13 +287,30 @@ public class SpawnerTemplateManager {
         yaml.set("victory-sound.volume", template.getVictorySoundVolume());
         yaml.set("victory-sound.pitch", template.getVictorySoundPitch());
         yaml.set("cooldown.mode", template.getCooldownMode().name());
-        yaml.set("cooldown.minutes", template.getCooldownMinutes());
+        yaml.set("cooldown.seconds", template.getCooldownSeconds());
+        yaml.set("cooldown.minutes", Math.max(1, template.getCooldownSeconds() / 60));
         yaml.set("roll-count", template.getRollCount());
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> list = new ArrayList<>();
         for (LootItem loot : template.getRewards()) {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("chance", TextUtil.roundChance(loot.getChance()));
+            map.put("broadcast", loot.isBroadcast());
+            if (loot.getBroadcastMessage() != null && !loot.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", loot.getBroadcastMessage());
+            }
+            if (loot.getLimitServerDaily() > 0) {
+                map.put("limit-server-daily", loot.getLimitServerDaily());
+            }
+            if (loot.getLimitServerMonthly() > 0) {
+                map.put("limit-server-monthly", loot.getLimitServerMonthly());
+            }
+            if (loot.getLimitPlayerDaily() > 0) {
+                map.put("limit-player-daily", loot.getLimitPlayerDaily());
+            }
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -430,7 +465,7 @@ public class SpawnerTemplateManager {
         if (loc == null || template == null || playerUuids == null) return;
         String key = toLocationKey(loc);
         long now = System.currentTimeMillis();
-        long expireTime = now + (long) template.getCooldownMinutes() * 60L * 1000L;
+        long expireTime = now + (long) template.getCooldownSeconds() * 1000L;
 
         switch (template.getCooldownMode()) {
             case ONCE_PER_PLAYER -> {

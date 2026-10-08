@@ -50,9 +50,10 @@ public class ResetManager {
 
     /**
      * Schedule a reset task for a suspicious block that has been brushed.
+     * @param seconds delay in seconds before resetting
      */
-    public void scheduleReset(Location loc, String templateName, int minutes) {
-        if (loc == null || loc.getWorld() == null || templateName == null || minutes <= 0) {
+    public void scheduleReset(Location loc, String templateName, int seconds) {
+        if (loc == null || loc.getWorld() == null || templateName == null || seconds <= 0) {
             return;
         }
 
@@ -63,7 +64,7 @@ public class ResetManager {
         }
 
         UUID sessionId = UUID.randomUUID();
-        long delayTicks = (long) minutes * 60L * 20L;
+        long delayTicks = (long) seconds * 20L;
 
         ResetSession session = new ResetSession(sessionId, loc, templateName, delayTicks);
 
@@ -84,7 +85,9 @@ public class ResetManager {
                 "%y%", loc.getBlockY(),
                 "%z%", loc.getBlockZ(),
                 "%name%", templateName,
-                "%minutes%", minutes
+                "%time%", clre20.customLootX.util.TextUtil.formatTimeSeconds(seconds),
+                "%seconds%", seconds,
+                "%minutes%", Math.max(1, (int) Math.ceil((double) seconds / 60.0))
         );
     }
 

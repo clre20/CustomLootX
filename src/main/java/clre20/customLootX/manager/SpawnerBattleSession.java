@@ -465,12 +465,103 @@ public class SpawnerBattleSession {
             }
         }.runTaskTimer(plugin, 1L, 6L);
 
+        // 代表玩家（用於個人上限與通告）
+        Player repPlayer = null;
+        UUID repUuid = null;
+        if (!participatingPlayers.isEmpty()) {
+            for (UUID uuid : participatingPlayers) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null && p.isOnline()) {
+                    repPlayer = p;
+                    repUuid = uuid;
+                    break;
+                }
+            }
+            if (repUuid == null) {
+                repUuid = participatingPlayers.iterator().next();
+            }
+        }
+
         // 抽取獎勵物品
-        List<ItemStack> rewards = template.rollAllItems();
-        if (rewards.isEmpty()) {
+        List<clre20.customLootX.model.LootItem> rolledLoots = template.rollAllLootItems(plugin, repUuid);
+        String worldName = world != null ? world.getName() : "world";
+        String playerNames = "無玩家";
+        if (!participatingPlayers.isEmpty()) {
+            List<String> names = new java.util.ArrayList<>();
+            for (UUID uuid : participatingPlayers) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null) {
+                    names.add(p.getName());
+                } else {
+                    org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
+                    if (op.getName() != null) {
+                        names.add(op.getName());
+                    }
+                }
+            }
+            if (!names.isEmpty()) {
+                playerNames = String.join(", ", names);
+            }
+        }
+
+        if (rolledLoots.isEmpty()) {
+            plugin.getConfigManager().log("spawner-air",
+                    "%player%", playerNames,
+                    "%name%", template.getName(),
+                    "%world%", worldName,
+                    "%x%", String.valueOf(spawnerLocation.getBlockX()),
+                    "%y%", String.valueOf(spawnerLocation.getBlockY()),
+                    "%z%", String.valueOf(spawnerLocation.getBlockZ())
+            );
             Bukkit.getScheduler().runTaskLater(plugin, this::completeAndCooldown, 20L);
             return;
         }
+
+        List<ItemStack> rewards = new java.util.ArrayList<>();
+        for (clre20.customLootX.model.LootItem loot : rolledLoots) {
+            if (loot.isAir() || loot.getItem() == null || loot.getItem().getType().isAir()) {
+                continue;
+            }
+            rewards.add(loot.getItem());
+            if (loot.isBroadcast()) {
+                plugin.getConfigManager().broadcastReward(
+                        repPlayer,
+                        "spawner",
+                        template.getDisplayName(),
+                        loot,
+                        template.getBroadcastMessage()
+                );
+            }
+        }
+
+        if (rewards.isEmpty()) {
+            plugin.getConfigManager().log("spawner-air",
+                    "%player%", playerNames,
+                    "%name%", template.getName(),
+                    "%world%", worldName,
+                    "%x%", String.valueOf(spawnerLocation.getBlockX()),
+                    "%y%", String.valueOf(spawnerLocation.getBlockY()),
+                    "%z%", String.valueOf(spawnerLocation.getBlockZ())
+            );
+            Bukkit.getScheduler().runTaskLater(plugin, this::completeAndCooldown, 20L);
+            return;
+        }
+
+        String itemsDesc = clre20.customLootX.util.TextUtil.formatItemList(rewards);
+        String itemNames = clre20.customLootX.util.TextUtil.formatItemNames(rewards);
+        plugin.getConfigManager().log("spawner-loot",
+                "%player%", playerNames,
+                "%name%", template.getName(),
+                "%count%", String.valueOf(rewards.size()),
+                "%items%", itemsDesc,
+                "%item%", itemsDesc,
+                "%item_names%", itemNames,
+                "%item_name%", itemNames,
+                "%world%", worldName,
+                "%x%", String.valueOf(spawnerLocation.getBlockX()),
+                "%y%", String.valueOf(spawnerLocation.getBlockY()),
+                "%z%", String.valueOf(spawnerLocation.getBlockZ())
+        );
 
         // 依序連續彈射獎勵物品
         new BukkitRunnable() {
@@ -518,7 +609,7 @@ public class SpawnerBattleSession {
         }
 
         World world = spawnerLocation.getWorld();
-        long cooldownTicks = (long) template.getCooldownMinutes() * 60L * 20L;
+        long cooldownTicks = (long) template.getCooldownSeconds() * 20L;
         long cooldownEnd = (world != null ? world.getGameTime() : 0L) + cooldownTicks;
 
         Block block = spawnerLocation.getBlock();

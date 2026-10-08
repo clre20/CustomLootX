@@ -111,6 +111,61 @@ public class VaultItemChanceGui extends CustomGuiHolder {
 
         // Slot 26: 移除此物品
         inventory.setItem(26, createButton(Material.LAVA_BUCKET, context.getPlugin().getConfigManager().getText("gui.chance.btn-delete-name", "&c🗑 移除此掉落物"), context.getPlugin().getConfigManager().getStringList("gui.chance.btn-delete-lore", List.of("&7將此物品從寶庫掉落池中移除"))));
+
+        // Slot 3: 全服每日上限
+        int sDaily = targetItem.getLimitServerDaily();
+        String sDailyName = "&6📅 全服每日上限: " + (sDaily > 0 ? "&a" + sDaily + " 個" : "&7無限制 (0)");
+        List<String> sDailyLore = List.of(
+                "&7設定此物品在「全伺服器每天」最多被開出的數量",
+                "&7達到上限後，今日再抽中將自動轉為落空",
+                "&7",
+                "&7目前設定: " + (sDaily > 0 ? "&e" + sDaily + " 個 / 天" : "&7無限制 (0)"),
+                "&8------------------------",
+                "&a[點擊] &e聊天室直接輸入數值",
+                "&c[右鍵 / F鍵] &7快速重設為 0 (無限制)"
+        );
+        inventory.setItem(3, createButton(Material.CLOCK, sDailyName, sDailyLore));
+
+        // Slot 4: 全服每月上限
+        int sMonthly = targetItem.getLimitServerMonthly();
+        String sMonthlyName = "&6🗓️ 全服每月上限: " + (sMonthly > 0 ? "&a" + sMonthly + " 個" : "&7無限制 (0)");
+        List<String> sMonthlyLore = List.of(
+                "&7設定此物品在「全伺服器每月」最多被開出的數量",
+                "&7達到上限後，當月再抽中將自動轉為落空",
+                "&7",
+                "&7目前設定: " + (sMonthly > 0 ? "&e" + sMonthly + " 個 / 月" : "&7無限制 (0)"),
+                "&8------------------------",
+                "&a[點擊] &e聊天室直接輸入數值",
+                "&c[右鍵 / F鍵] &7快速重設為 0 (無限制)"
+        );
+        inventory.setItem(4, createButton(Material.COMPASS, sMonthlyName, sMonthlyLore));
+
+        // Slot 5: 個人每日上限 (每人每天)
+        int pDaily = targetItem.getLimitPlayerDaily();
+        String pDailyName = "&6👤 個人每日上限: " + (pDaily > 0 ? "&a" + pDaily + " 個" : "&7無限制 (0)");
+        List<String> pDailyLore = List.of(
+                "&7設定單一玩家在「每天」最多能開出此物品的數量",
+                "&7達到上限後，該玩家今日再抽中將自動轉為落空",
+                "&7",
+                "&7目前設定: " + (pDaily > 0 ? "&e" + pDaily + " 個 / 人/天" : "&7無限制 (0)"),
+                "&8------------------------",
+                "&a[點擊] &e聊天室直接輸入數值",
+                "&c[右鍵 / F鍵] &7快速重設為 0 (無限制)"
+        );
+        inventory.setItem(5, createButton(Material.PLAYER_HEAD, pDailyName, pDailyLore));
+
+        // Slot 24: 全服獲獎通告開關
+        boolean bc = targetItem.isBroadcast();
+        String bcName = bc ? "&6📢 抽中全服通告: &a【已開啟】" : "&6📢 抽中全服通告: &7【已關閉】";
+        List<String> bcLore = List.of(
+                "&7當玩家成功解鎖寶庫獲得此物品時，",
+                "&7是否向全服聊天室發送慶祝廣播！",
+                "&7",
+                bc ? "&a✔ 目前狀態: 開啟 (抽中將全服廣播)" : "&7✘ 目前狀態: 關閉 (安靜掉落)",
+                "&7",
+                "&e[點擊切換開啟/關閉]"
+        );
+        inventory.setItem(24, createButton(Material.BELL, bcName, bcLore));
     }
 
     private ItemStack createButton(Material mat, String name, List<String> loreLines) {
@@ -137,6 +192,10 @@ public class VaultItemChanceGui extends CustomGuiHolder {
         int slot = event.getRawSlot();
 
         switch (slot) {
+            case 3 -> handleLimitClick(event, targetItem.getLimitServerDaily(), targetItem::setLimitServerDaily, "全服每日上限", player);
+            case 4 -> handleLimitClick(event, targetItem.getLimitServerMonthly(), targetItem::setLimitServerMonthly, "全服每月上限", player);
+            case 5 -> handleLimitClick(event, targetItem.getLimitPlayerDaily(), targetItem::setLimitPlayerDaily, "個人每日上限", player);
+
             case 9 -> adjustChance(-10.0, player);
             case 10 -> adjustChance(-1.0, player);
             case 11 -> adjustChance(-0.10, player);
@@ -199,6 +258,11 @@ public class VaultItemChanceGui extends CustomGuiHolder {
                     context.getPlugin().getConfigManager().playSound(player, "error");
                 }
             }
+            case 24 -> {
+                targetItem.setBroadcast(!targetItem.isBroadcast());
+                context.getPlugin().getConfigManager().playSound(player, "click");
+                render();
+            }
             case 26 -> {
                 // 移除此掉落物
                 context.getTemplate().getItems().remove(targetItem);
@@ -233,5 +297,46 @@ public class VaultItemChanceGui extends CustomGuiHolder {
         } else {
             context.getPlugin().getConfigManager().playSound(player, "error");
         }
+    }
+
+    private void handleLimitClick(InventoryClickEvent event, int currentVal, java.util.function.Consumer<Integer> setter, String label, Player player) {
+        if (event.isRightClick() || event.getClick() == org.bukkit.event.inventory.ClickType.SWAP_OFFHAND) {
+            setter.accept(0);
+            context.getPlugin().getConfigManager().playSound(player, "click");
+            player.sendMessage(TextUtil.parse(context.getPlugin().getConfigManager().getPrefix() + "&a已將 " + label + " 重設為: &7無限制 (0)"));
+            render();
+            return;
+        }
+
+        context.getPlugin().getConfigManager().playSound(player, "click");
+        context.setTransitioning(true);
+        context.getPlugin().getChatInputManager().requestInput(
+                player,
+                "&e請在聊天室輸入 " + label + " 數值 (輸入整數，0 或 cancel 為無限制)：",
+                input -> {
+                    try {
+                        int parsed = Integer.parseInt(input.trim());
+                        if (parsed < 0) {
+                            context.getPlugin().getConfigManager().playSound(player, "error");
+                            player.sendMessage(TextUtil.parse(context.getPlugin().getConfigManager().getPrefix() + "&c數值不能為負數！"));
+                        } else {
+                            setter.accept(parsed);
+                            context.getPlugin().getConfigManager().playSound(player, "success");
+                            player.sendMessage(TextUtil.parse(context.getPlugin().getConfigManager().getPrefix() + "&a已將 " + label + " 設定為: &e" + (parsed > 0 ? parsed : "無限制 (0)") + " &7(請記得點擊返回並於最後步驟點擊【確認送出】以正式生效)"));
+                        }
+                    } catch (NumberFormatException e) {
+                        context.getPlugin().getConfigManager().playSound(player, "error");
+                        player.sendMessage(TextUtil.parse(context.getPlugin().getConfigManager().getPrefix() + "&c請輸入有效的整數數字！"));
+                    }
+                    render();
+                    open();
+                    context.setTransitioning(false);
+                },
+                () -> {
+                    render();
+                    open();
+                    context.setTransitioning(false);
+                }
+        );
     }
 }

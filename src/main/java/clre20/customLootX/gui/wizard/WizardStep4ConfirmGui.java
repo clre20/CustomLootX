@@ -99,15 +99,18 @@ public class WizardStep4ConfirmGui extends CustomGuiHolder {
 
         inventory.setItem(12, createButton(resetOn ? matOn : matOff, step2ResetName, step2ResetLore));
 
-        String step2TimeName = context.getPlugin().getConfigManager().getText("gui.step4.step2-time-name", "&6【步驟二】間隔時間: &a%minutes% &7分鐘", "%minutes%", template.getResetMinutes());
+        String step2TimeName = context.getPlugin().getConfigManager().getText("gui.step4.step2-time-name", "&6【步驟二】間隔時間: &a%time%",
+                "%time%", TextUtil.formatTimeSeconds(template.getResetSeconds()),
+                "%minutes%", template.getResetMinutes());
         List<String> step2TimeLore = context.getPlugin().getConfigManager().getStringList(
                 "gui.step4.step2-time-lore",
                 List.of(
                         "&7方塊被刷空後的自動重置冷卻時間",
-                        "&7目前設定: &a%minutes% &7分鐘",
+                        "&7目前設定: &a" + TextUtil.formatTimeSeconds(template.getResetSeconds()),
                         "&7",
                         "&e點擊可返回步驟二修改"
                 ),
+                "%time%", TextUtil.formatTimeSeconds(template.getResetSeconds()),
                 "%minutes%", template.getResetMinutes()
         );
         inventory.setItem(14, createButton(Material.CLOCK, step2TimeName, step2TimeLore));
@@ -339,7 +342,7 @@ public class WizardStep4ConfirmGui extends CustomGuiHolder {
                 String typeDesc = template.getType() == Material.SUSPICIOUS_SAND
                         ? context.getPlugin().getConfigManager().getText("items.configured.type-sand", "可疑沙")
                         : context.getPlugin().getConfigManager().getText("items.configured.type-gravel", "可疑礫石");
-                String resetDesc = template.isResetEnabled() ? (template.getResetMinutes() + "分鐘") : "關閉";
+                String resetDesc = template.isResetEnabled() ? TextUtil.formatTimeSeconds(template.getResetSeconds()) : "關閉";
 
                 context.getPlugin().getConfigManager().log("gui-save",
                         "%player%", player.getName(),

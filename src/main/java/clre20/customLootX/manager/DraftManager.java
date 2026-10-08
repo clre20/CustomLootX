@@ -258,7 +258,11 @@ public class DraftManager {
         yaml.set("type", template.getType().name());
         yaml.set("display-name", template.getDisplayName());
         yaml.set("reset-enabled", template.isResetEnabled());
+        yaml.set("reset-seconds", template.getResetSeconds());
         yaml.set("reset-minutes", template.getResetMinutes());
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> itemsList = new ArrayList<>();
         List<LootItem> items = template.getItems();
@@ -268,6 +272,13 @@ public class DraftManager {
             map.put("slot", i);
             map.put("chance", item.getChance());
             map.put("is-air", item.isAir());
+            map.put("broadcast", item.isBroadcast());
+            if (item.getBroadcastMessage() != null && !item.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", item.getBroadcastMessage());
+            }
+            if (item.getLimitServerDaily() > 0) map.put("limit-server-daily", item.getLimitServerDaily());
+            if (item.getLimitServerMonthly() > 0) map.put("limit-server-monthly", item.getLimitServerMonthly());
+            if (item.getLimitPlayerDaily() > 0) map.put("limit-player-daily", item.getLimitPlayerDaily());
             if (!item.isAir() && item.getItem() != null) {
                 map.put("item", item.getItem());
             }
@@ -285,7 +296,11 @@ public class DraftManager {
         LootTemplate template = new LootTemplate(name, type);
         template.setDisplayName(yaml.getString("display-name", null));
         template.setResetEnabled(yaml.getBoolean("reset-enabled", false));
-        template.setResetMinutes(yaml.getInt("reset-minutes", 5));
+        int resetSeconds = yaml.contains("reset-seconds")
+                ? Math.max(1, yaml.getInt("reset-seconds"))
+                : Math.max(1, yaml.getInt("reset-minutes", 5) * 60);
+        template.setResetSeconds(resetSeconds);
+        template.setBroadcastMessage(yaml.getString("broadcast-message", null));
 
         List<?> list = yaml.getList("items");
         if (list != null) {
@@ -295,15 +310,26 @@ public class DraftManager {
                     Object cObj = map.get("chance");
                     if (cObj instanceof Number n) chance = n.doubleValue();
                     boolean isAir = Boolean.TRUE.equals(map.get("is-air"));
+                    boolean broadcast = Boolean.TRUE.equals(map.get("broadcast"));
+                    String itemBroadcastMsg = (String) map.get("broadcast-message");
+                    int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                    int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                    int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
                     ItemStack item = null;
                     Object iObj = map.get("item");
                     if (iObj instanceof ItemStack is) item = is;
 
+                    LootItem lootItem;
                     if (isAir || item == null) {
-                        template.addItem(new LootItem(chance, true));
+                        lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                     } else {
-                        template.addItem(new LootItem(item, chance));
+                        lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                     }
+                    lootItem.setLimitServerDaily(limitServerDaily);
+                    lootItem.setLimitServerMonthly(limitServerMonthly);
+                    lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                    template.addItem(lootItem);
                 }
             }
         }
@@ -317,12 +343,23 @@ public class DraftManager {
         yaml.set("key-item", template.getKeyItem());
         yaml.set("roll-count", template.getRollCount());
         yaml.set("cooldown.mode", template.getCooldownMode().name());
+        yaml.set("cooldown.seconds", template.getCooldownSeconds());
         yaml.set("cooldown.minutes", template.getCooldownMinutes());
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> list = new ArrayList<>();
         for (LootItem loot : template.getItems()) {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("chance", TextUtil.roundChance(loot.getChance()));
+            map.put("broadcast", loot.isBroadcast());
+            if (loot.getBroadcastMessage() != null && !loot.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", loot.getBroadcastMessage());
+            }
+            if (loot.getLimitServerDaily() > 0) map.put("limit-server-daily", loot.getLimitServerDaily());
+            if (loot.getLimitServerMonthly() > 0) map.put("limit-server-monthly", loot.getLimitServerMonthly());
+            if (loot.getLimitPlayerDaily() > 0) map.put("limit-player-daily", loot.getLimitPlayerDaily());
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -344,7 +381,10 @@ public class DraftManager {
         int rollCount = yaml.getInt("roll-count", 3);
         String modeStr = yaml.getString("cooldown.mode", "PLAYER_COOLDOWN");
         VaultCooldownMode mode = VaultCooldownMode.fromString(modeStr);
-        int cooldownMinutes = yaml.getInt("cooldown.minutes", 10);
+        int cooldownSeconds = yaml.contains("cooldown.seconds")
+                ? yaml.getInt("cooldown.seconds")
+                : yaml.getInt("cooldown.minutes", 10) * 60;
+        String broadcastMessage = yaml.getString("broadcast-message", null);
 
         List<LootItem> items = new ArrayList<>();
         List<?> rawItems = yaml.getList("items");
@@ -355,19 +395,32 @@ public class DraftManager {
                     Object cObj = map.get("chance");
                     if (cObj instanceof Number n) chance = n.doubleValue();
                     boolean isAir = Boolean.TRUE.equals(map.get("is-air"));
+                    boolean broadcast = Boolean.TRUE.equals(map.get("broadcast"));
+                    String itemBroadcastMsg = (String) map.get("broadcast-message");
+                    int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                    int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                    int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
                     ItemStack item = null;
                     Object iObj = map.get("item");
                     if (iObj instanceof ItemStack is) item = is;
 
+                    LootItem lootItem;
                     if (isAir || item == null) {
-                        items.add(new LootItem(chance, true));
+                        lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                     } else {
-                        items.add(new LootItem(item, chance));
+                        lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                     }
+                    lootItem.setLimitServerDaily(limitServerDaily);
+                    lootItem.setLimitServerMonthly(limitServerMonthly);
+                    lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                    items.add(lootItem);
                 }
             }
         }
-        return new VaultTemplate(name, ominous, displayName, keyItem, rollCount, mode, cooldownMinutes, items);
+        VaultTemplate vt = new VaultTemplate(name, ominous, displayName, keyItem, rollCount, mode, Math.max(1, (int) Math.ceil((double) cooldownSeconds / 60.0)), items, broadcastMessage);
+        vt.setCooldownSeconds(cooldownSeconds);
+        return vt;
     }
 
     private void serializeSpawnerTemplate(YamlConfiguration yaml, SpawnerTemplate template) {
@@ -411,13 +464,24 @@ public class DraftManager {
         yaml.set("victory-sound.volume", template.getVictorySoundVolume());
         yaml.set("victory-sound.pitch", template.getVictorySoundPitch());
         yaml.set("cooldown.mode", template.getCooldownMode().name());
+        yaml.set("cooldown.seconds", template.getCooldownSeconds());
         yaml.set("cooldown.minutes", template.getCooldownMinutes());
         yaml.set("roll-count", template.getRollCount());
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> list = new ArrayList<>();
         for (LootItem loot : template.getRewards()) {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("chance", TextUtil.roundChance(loot.getChance()));
+            map.put("broadcast", loot.isBroadcast());
+            if (loot.getBroadcastMessage() != null && !loot.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", loot.getBroadcastMessage());
+            }
+            if (loot.getLimitServerDaily() > 0) map.put("limit-server-daily", loot.getLimitServerDaily());
+            if (loot.getLimitServerMonthly() > 0) map.put("limit-server-monthly", loot.getLimitServerMonthly());
+            if (loot.getLimitPlayerDaily() > 0) map.put("limit-player-daily", loot.getLimitPlayerDaily());
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -465,7 +529,9 @@ public class DraftManager {
 
         String modeStr = yaml.getString("cooldown.mode", "GLOBAL_COOLDOWN");
         VaultCooldownMode mode = VaultCooldownMode.fromString(modeStr);
-        int cooldownMinutes = yaml.getInt("cooldown.minutes", 30);
+        int cooldownSeconds = yaml.contains("cooldown.seconds")
+                ? yaml.getInt("cooldown.seconds")
+                : yaml.getInt("cooldown.minutes", 30) * 60;
         int rollCount = yaml.getInt("roll-count", 2);
 
         List<LootItem> items = new ArrayList<>();
@@ -477,15 +543,26 @@ public class DraftManager {
                     Object cObj = map.get("chance");
                     if (cObj instanceof Number n) chance = n.doubleValue();
                     boolean isAir = Boolean.TRUE.equals(map.get("is-air"));
+                    boolean broadcast = Boolean.TRUE.equals(map.get("broadcast"));
+                    String itemBroadcastMsg = (String) map.get("broadcast-message");
+                    int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                    int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                    int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
                     ItemStack item = null;
                     Object iObj = map.get("item");
                     if (iObj instanceof ItemStack is) item = is;
 
+                    LootItem lootItem;
                     if (isAir || item == null) {
-                        items.add(new LootItem(chance, true));
+                        lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                     } else {
-                        items.add(new LootItem(item, chance));
+                        lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                     }
+                    lootItem.setLimitServerDaily(limitServerDaily);
+                    lootItem.setLimitServerMonthly(limitServerMonthly);
+                    lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                    items.add(lootItem);
                 }
             }
         }
@@ -531,11 +608,14 @@ public class DraftManager {
         }
 
         boolean waitWaveCleared = yaml.getBoolean("wave.wait-wave-cleared", true);
+        String broadcastMessage = yaml.getString("broadcast-message", null);
 
-        return new SpawnerTemplate(name, ominous, displayName, spawnedType, displayCycle, displayMobId,
+        SpawnerTemplate st = new SpawnerTemplate(name, ominous, displayName, spawnedType, displayCycle, displayMobId,
                 mobPool, spawnMode, waves,
                 spawnDelaySeconds, playerRange, waitWaveCleared,
                 showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
-                mode, cooldownMinutes, rollCount, items);
+                mode, Math.max(1, (int) Math.ceil((double) cooldownSeconds / 60.0)), rollCount, items, broadcastMessage);
+        st.setCooldownSeconds(cooldownSeconds);
+        return st;
     }
 }

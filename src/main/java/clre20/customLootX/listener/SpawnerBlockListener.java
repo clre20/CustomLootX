@@ -204,7 +204,7 @@ public class SpawnerBlockListener implements Listener {
                         plugin.getSpawnerTemplateManager().registerSpawner(loc, templateName);
                         long cd = plugin.getSpawnerTemplateManager().checkCooldownStatus(loc, player.getUniqueId(), template);
                         if (cd > 0) {
-                            plugin.getConfigManager().send(player, "spawner-in-cooldown", "%time%", String.valueOf(cd));
+                            plugin.getConfigManager().send(player, "spawner-in-cooldown", "%time%", TextUtil.formatTimeSeconds(cd));
                             plugin.getConfigManager().playSound(player, "error");
                         } else if (cd == -1) {
                             plugin.getConfigManager().send(player, "spawner-already-completed");

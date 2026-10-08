@@ -291,8 +291,45 @@ public class VaultBlockListener implements Listener {
                     plugin.getVaultTemplateManager().recordUnlock(loc, player.getUniqueId(), template);
 
                     // E. 抽取並彈出戰利品
-                    List<ItemStack> rewards = template.rollAllItems();
+                    List<clre20.customLootX.model.LootItem> rolledLoots = template.rollAllLootItems(plugin, player.getUniqueId());
+                    if (rolledLoots.isEmpty()) {
+                        plugin.getConfigManager().log("vault-air",
+                                "%player%", player.getName(),
+                                "%name%", template.getName(),
+                                "%world%", loc.getWorld().getName(),
+                                "%x%", String.valueOf(loc.getBlockX()),
+                                "%y%", String.valueOf(loc.getBlockY()),
+                                "%z%", String.valueOf(loc.getBlockZ())
+                        );
+                        return;
+                    }
+
+                    List<ItemStack> rewards = new java.util.ArrayList<>();
+                    for (clre20.customLootX.model.LootItem loot : rolledLoots) {
+                        if (loot.isAir() || loot.getItem() == null || loot.getItem().getType().isAir()) {
+                            continue;
+                        }
+                        rewards.add(loot.getItem());
+                        if (loot.isBroadcast()) {
+                            plugin.getConfigManager().broadcastReward(
+                                    player,
+                                    "vault",
+                                    template.getDisplayName(),
+                                    loot,
+                                    template.getBroadcastMessage()
+                            );
+                        }
+                    }
+
                     if (rewards.isEmpty()) {
+                        plugin.getConfigManager().log("vault-air",
+                                "%player%", player.getName(),
+                                "%name%", template.getName(),
+                                "%world%", loc.getWorld().getName(),
+                                "%x%", String.valueOf(loc.getBlockX()),
+                                "%y%", String.valueOf(loc.getBlockY()),
+                                "%z%", String.valueOf(loc.getBlockZ())
+                        );
                         return;
                     }
 
@@ -396,10 +433,16 @@ public class VaultBlockListener implements Listener {
                     }.runTaskLater(plugin, closeDelay);
 
                     // 原版試煉寶庫開獎無聊天室文字提示，僅透過百葉窗動畫、音效與物品噴發表現，此處僅於伺服器主控台記錄日誌
+                    String itemsDesc = clre20.customLootX.util.TextUtil.formatItemList(rewards);
+                    String itemNames = clre20.customLootX.util.TextUtil.formatItemNames(rewards);
                     plugin.getConfigManager().log("vault-unlock",
                             "%player%", player.getName(),
                             "%name%", template.getName(),
                             "%count%", String.valueOf(rewards.size()),
+                            "%items%", itemsDesc,
+                            "%item%", itemsDesc,
+                            "%item_names%", itemNames,
+                            "%item_name%", itemNames,
                             "%world%", loc.getWorld().getName(),
                             "%x%", String.valueOf(loc.getBlockX()),
                             "%y%", String.valueOf(loc.getBlockY()),
@@ -506,14 +549,6 @@ public class VaultBlockListener implements Listener {
     }
 
     private String formatTime(long totalSeconds) {
-        if (totalSeconds < 60) {
-            return totalSeconds + " 秒";
-        }
-        long minutes = totalSeconds / 60;
-        long seconds = totalSeconds % 60;
-        if (seconds == 0) {
-            return minutes + " 分鐘";
-        }
-        return minutes + " 分 " + seconds + " 秒";
+        return clre20.customLootX.util.TextUtil.formatTimeSeconds(totalSeconds);
     }
 }

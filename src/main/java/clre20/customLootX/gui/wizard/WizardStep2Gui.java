@@ -37,7 +37,7 @@ public class WizardStep2Gui extends CustomGuiHolder {
 
         LootTemplate template = context.getTemplate();
         boolean enabled = template.isResetEnabled();
-        int minutes = template.getResetMinutes();
+        int seconds = template.getResetSeconds();
 
         // Slot 12: Reset toggle
         String toggleName = context.getPlugin().getConfigManager().getText("gui.step2.toggle-button-name", "&6自動重置功能");
@@ -66,16 +66,17 @@ public class WizardStep2Gui extends CustomGuiHolder {
 
         inventory.setItem(12, createButton(enabled ? matOn : matOff, toggleName, toggleLore));
 
-        // Slot 14: Minutes adjustment
+        // Slot 14: Time adjustment
         String timeBtnName = context.getPlugin().getConfigManager().getText("gui.step2.time-button-name", "&e重置間隔時間");
         List<String> timeLore = context.getPlugin().getConfigManager().getStringList(
                 "gui.step2.time-button-lore",
                 List.of(
-                        "&7目前設定: &a%minutes% &7分鐘",
+                        "&7目前設定: &a" + TextUtil.formatTimeSeconds(seconds),
                         "&7",
-                        "&e點擊此處 &f開啟時間調整畫面 (支援按鈕直覺增減)"
+                        "&e點擊此處 &f開啟時間調整畫面 (支援秒數增減)"
                 ),
-                "%minutes%", minutes
+                "%time%", TextUtil.formatTimeSeconds(seconds),
+                "%minutes%", template.getResetMinutes()
         );
         inventory.setItem(14, createButton(Material.CLOCK, timeBtnName, timeLore));
 

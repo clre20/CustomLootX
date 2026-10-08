@@ -203,7 +203,7 @@ public class PlayerInteractListener implements Listener {
             // New blank template draft
             template = new LootTemplate("", held.getType());
             template.setResetEnabled(false);
-            template.setResetMinutes(5);
+            template.setResetSeconds(300);
             isNew = true;
         }
 
@@ -255,7 +255,7 @@ public class PlayerInteractListener implements Listener {
                     cancel();
                     activeBrushingBlocks.remove(key);
                     if (!plugin.getResetManager().hasPendingReset(loc)) {
-                        plugin.getResetManager().scheduleReset(loc, templateName, template.getResetMinutes());
+                        plugin.getResetManager().scheduleReset(loc, templateName, template.getResetSeconds());
                     }
                     return;
                 }

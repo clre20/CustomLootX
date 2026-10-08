@@ -178,6 +178,61 @@ public class ItemChanceGui extends CustomGuiHolder {
         String removeName = plugin.getConfigManager().getText("gui.chance.remove-name", "&c從獎池移除此物品");
         List<String> removeLore = plugin.getConfigManager().getStringList("gui.chance.remove-lore", List.of("&7將此項目從自訂可疑方塊中刪除"));
         inventory.setItem(26, createButton(Material.LAVA_BUCKET, removeName, removeLore));
+
+        // Slot 3: 全服每日上限
+        int sDaily = lootItem.getLimitServerDaily();
+        String sDailyName = "&6📅 全服每日上限: " + (sDaily > 0 ? "&a" + sDaily + " 個" : "&7無限制 (0)");
+        List<String> sDailyLore = List.of(
+                "&7設定此物品在「全伺服器每天」最多產出的數量",
+                "&7達到上限後，今日再抽中將自動轉為落空",
+                "&7",
+                "&7目前設定: " + (sDaily > 0 ? "&e" + sDaily + " 個 / 天" : "&7無限制 (0)"),
+                "&8------------------------",
+                "&a[點擊] &e聊天室直接輸入數值",
+                "&c[右鍵 / F鍵] &7快速重設為 0 (無限制)"
+        );
+        inventory.setItem(3, createButton(Material.CLOCK, sDailyName, sDailyLore));
+
+        // Slot 4: 全服每月上限
+        int sMonthly = lootItem.getLimitServerMonthly();
+        String sMonthlyName = "&6🗓️ 全服每月上限: " + (sMonthly > 0 ? "&a" + sMonthly + " 個" : "&7無限制 (0)");
+        List<String> sMonthlyLore = List.of(
+                "&7設定此物品在「全伺服器每月」最多產出的數量",
+                "&7達到上限後，當月再抽中將自動轉為落空",
+                "&7",
+                "&7目前設定: " + (sMonthly > 0 ? "&e" + sMonthly + " 個 / 月" : "&7無限制 (0)"),
+                "&8------------------------",
+                "&a[點擊] &e聊天室直接輸入數值",
+                "&c[右鍵 / F鍵] &7快速重設為 0 (無限制)"
+        );
+        inventory.setItem(4, createButton(Material.COMPASS, sMonthlyName, sMonthlyLore));
+
+        // Slot 5: 個人每日上限 (每人每天)
+        int pDaily = lootItem.getLimitPlayerDaily();
+        String pDailyName = "&6👤 個人每日上限: " + (pDaily > 0 ? "&a" + pDaily + " 個" : "&7無限制 (0)");
+        List<String> pDailyLore = List.of(
+                "&7設定單一玩家在「每天」最多能獲得此物品的數量",
+                "&7達到上限後，該玩家今日再抽中將自動轉為落空",
+                "&7",
+                "&7目前設定: " + (pDaily > 0 ? "&e" + pDaily + " 個 / 人/天" : "&7無限制 (0)"),
+                "&8------------------------",
+                "&a[點擊] &e聊天室直接輸入數值",
+                "&c[右鍵 / F鍵] &7快速重設為 0 (無限制)"
+        );
+        inventory.setItem(5, createButton(Material.PLAYER_HEAD, pDailyName, pDailyLore));
+
+        // Slot 24: 全服獲獎通告開關
+        boolean bc = lootItem.isBroadcast();
+        String bcName = bc ? "&6📢 抽中全服通告: &a【已開啟】" : "&6📢 抽中全服通告: &7【已關閉】";
+        List<String> bcLore = List.of(
+                "&7當玩家幸運刷出此物品時，",
+                "&7是否向全服聊天室發送慶祝廣播！",
+                "&7",
+                bc ? "&a✔ 目前狀態: 開啟 (抽中將全服廣播)" : "&7✘ 目前狀態: 關閉 (安靜掉落)",
+                "&7",
+                "&e[點擊切換開啟/關閉]"
+        );
+        inventory.setItem(24, createButton(Material.BELL, bcName, bcLore));
     }
 
     private ItemStack createButton(Material mat, String name, List<String> loreLines) {
@@ -214,6 +269,10 @@ public class ItemChanceGui extends CustomGuiHolder {
         LootItem item = template.getItems().get(itemIndex);
 
         switch (slot) {
+            case 3 -> handleLimitClick(event, item.getLimitServerDaily(), item::setLimitServerDaily, "全服每日上限");
+            case 4 -> handleLimitClick(event, item.getLimitServerMonthly(), item::setLimitServerMonthly, "全服每月上限");
+            case 5 -> handleLimitClick(event, item.getLimitPlayerDaily(), item::setLimitPlayerDaily, "個人每日上限");
+
             case 9 -> adjustChance(item, -10.00);
             case 10 -> adjustChance(item, -1.00);
             case 11 -> adjustChance(item, -0.10);
@@ -279,6 +338,13 @@ public class ItemChanceGui extends CustomGuiHolder {
                 render();
             }
 
+            case 24 -> {
+                // Toggle broadcast
+                item.setBroadcast(!item.isBroadcast());
+                plugin.getConfigManager().playSound(player, "click");
+                render();
+            }
+
             case 26 -> {
                 // Delete item
                 template.removeItem(itemIndex);
@@ -295,5 +361,43 @@ public class ItemChanceGui extends CustomGuiHolder {
         item.setChance(newChance);
         plugin.getConfigManager().playSound(player, "click");
         render();
+    }
+
+    private void handleLimitClick(InventoryClickEvent event, int currentVal, java.util.function.Consumer<Integer> setter, String label) {
+        if (event.isRightClick() || event.getClick() == org.bukkit.event.inventory.ClickType.SWAP_OFFHAND) {
+            setter.accept(0);
+            plugin.getConfigManager().playSound(player, "click");
+            player.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&a已將 " + label + " 重設為: &7無限制 (0)"));
+            render();
+            return;
+        }
+
+        plugin.getConfigManager().playSound(player, "click");
+        plugin.getChatInputManager().requestInput(
+                player,
+                "&e請在聊天室輸入 " + label + " 數值 (輸入整數，0 或 cancel 為無限制)：",
+                input -> {
+                    try {
+                        int parsed = Integer.parseInt(input.trim());
+                        if (parsed < 0) {
+                            plugin.getConfigManager().playSound(player, "error");
+                            player.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&c數值不能為負數！"));
+                        } else {
+                            setter.accept(parsed);
+                            plugin.getConfigManager().playSound(player, "success");
+                            player.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&a已將 " + label + " 設定為: &e" + (parsed > 0 ? parsed : "無限制 (0)") + " &7(請記得點擊返回並於最後步驟點擊【確認送出】以正式生效)"));
+                        }
+                    } catch (NumberFormatException e) {
+                        plugin.getConfigManager().playSound(player, "error");
+                        player.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&c請輸入有效的整數數字！"));
+                    }
+                    render();
+                    open();
+                },
+                () -> {
+                    render();
+                    open();
+                }
+        );
     }
 }
