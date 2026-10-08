@@ -21,6 +21,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -48,6 +49,8 @@ public class SpawnerTemplateManager {
     private final Map<String, Set<UUID>> rewardedPlayers = new ConcurrentHashMap<>();
     // 4. 已放置生怪磚追蹤：locationKey -> templateName
     private final Map<String, String> placedSpawners = new ConcurrentHashMap<>();
+    // 快取解析後的 Location，避免每秒心跳重複分割字串與配置 Location 物件
+    private final Map<String, Location> locationCache = new ConcurrentHashMap<>();
     // 5. 進行中的戰鬥進程：locationKey -> SpawnerBattleSession
     private final Map<String, SpawnerBattleSession> activeBattles = new ConcurrentHashMap<>();
 
@@ -144,7 +147,12 @@ public class SpawnerTemplateManager {
         } catch (Exception e) {
             mode = VaultCooldownMode.PLAYER_COOLDOWN;
         }
-        int cooldownMinutes = Math.max(1, yaml.getInt("cooldown.minutes", 15));
+        int cooldownSeconds;
+        if (yaml.contains("cooldown.seconds")) {
+            cooldownSeconds = Math.max(1, yaml.getInt("cooldown.seconds", 900));
+        } else {
+            cooldownSeconds = Math.max(1, yaml.getInt("cooldown.minutes", 15)) * 60;
+        }
         int rollCount = Math.max(1, yaml.getInt("roll-count", 3));
 
         List<LootItem> items = new ArrayList<>();
@@ -153,6 +161,9 @@ public class SpawnerTemplateManager {
             for (Map<?, ?> map : list) {
                 double chance = TextUtil.roundChance(map.containsKey("chance") ? ((Number) map.get("chance")).doubleValue() : 0.0);
                 boolean isAir = map.containsKey("is-air") && Boolean.parseBoolean(String.valueOf(map.get("is-air")));
+                boolean broadcast = map.containsKey("broadcast") && Boolean.parseBoolean(String.valueOf(map.get("broadcast")));
+                String itemBroadcastMsg = map.containsKey("broadcast-message") ? String.valueOf(map.get("broadcast-message")) : null;
+
                 ItemStack item = null;
                 if (!isAir && map.containsKey("item")) {
                     Object itemObj = map.get("item");
@@ -160,11 +171,20 @@ public class SpawnerTemplateManager {
                         item = is;
                     }
                 }
+                int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
+                LootItem lootItem;
                 if (isAir || item == null) {
-                    items.add(new LootItem(chance, true));
+                    lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                 } else {
-                    items.add(new LootItem(item, chance));
+                    lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                 }
+                lootItem.setLimitServerDaily(limitServerDaily);
+                lootItem.setLimitServerMonthly(limitServerMonthly);
+                lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                items.add(lootItem);
             }
         }
 
@@ -174,10 +194,48 @@ public class SpawnerTemplateManager {
         float victorySoundVolume = (float) yaml.getDouble("victory-sound.volume", 1.0);
         float victorySoundPitch = (float) yaml.getDouble("victory-sound.pitch", 1.2);
 
+        String spawnModeStr = yaml.getString("spawn-mode", "SEQUENCE");
+        clre20.customLootX.model.SpawnerSpawnMode spawnMode = clre20.customLootX.model.SpawnerSpawnMode.fromString(spawnModeStr);
+
+        List<List<String>> waves = new ArrayList<>();
+        if (yaml.isList("waves")) {
+            List<?> rawWaves = yaml.getList("waves");
+            if (rawWaves != null) {
+                for (Object obj : rawWaves) {
+                    if (obj instanceof List<?> l) {
+                        List<String> w = new ArrayList<>();
+                        for (Object o : l) {
+                            if (o != null) w.add(String.valueOf(o));
+                        }
+                        waves.add(w);
+                    }
+                }
+            }
+        }
+        if (waves.isEmpty()) {
+            List<String> spawnSequence = yaml.getStringList("spawn-sequence");
+            int sim = Math.max(1, simultaneousMobs);
+            if (!spawnSequence.isEmpty()) {
+                List<String> cur = new ArrayList<>();
+                for (String s : spawnSequence) {
+                    cur.add(s);
+                    if (cur.size() >= sim) {
+                        waves.add(new ArrayList<>(cur));
+                        cur.clear();
+                    }
+                }
+                if (!cur.isEmpty()) waves.add(cur);
+            }
+        }
+
+        boolean waitWaveCleared = yaml.getBoolean("wave.wait-wave-cleared", true);
+        String broadcastMessage = yaml.getString("broadcast-message", null);
+
         return new SpawnerTemplate(name, ominous, displayName, spawnedType, displayCycle, displayMobId,
-                mobPool, totalMobs, simultaneousMobs,
-                spawnDelaySeconds, playerRange, showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
-                mode, cooldownMinutes, rollCount, items);
+                mobPool, spawnMode, waves,
+                spawnDelaySeconds, playerRange, waitWaveCleared,
+                showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
+                mode, cooldownSeconds, rollCount, items, broadcastMessage);
     }
 
     public boolean saveTemplate(SpawnerTemplate template) {
@@ -196,6 +254,14 @@ public class SpawnerTemplateManager {
             yaml.set("display-mob-id", template.getDisplayMobId());
         }
         yaml.set("spawned-type", template.getSpawnedType().name());
+        yaml.set("spawn-mode", "SEQUENCE");
+        yaml.set("spawn-sequence", template.getSpawnSequence());
+
+        List<List<String>> waveData = new ArrayList<>();
+        for (List<String> w : template.getWaves()) {
+            waveData.add(new ArrayList<>(w));
+        }
+        yaml.set("waves", waveData);
 
         List<Map<String, Object>> mobList = new ArrayList<>();
         for (SpawnerMobEntry entry : template.getMobPool()) {
@@ -214,19 +280,37 @@ public class SpawnerTemplateManager {
         yaml.set("wave.simultaneous-mobs", template.getSimultaneousMobs());
         yaml.set("wave.spawn-delay-seconds", template.getSpawnDelaySeconds());
         yaml.set("wave.player-range", template.getPlayerRange());
+        yaml.set("wave.wait-wave-cleared", template.isWaitWaveCleared());
         yaml.set("show-actionbar", template.isShowActionBar());
         yaml.set("victory-sound.enabled", template.isVictorySoundEnabled());
         yaml.set("victory-sound.sound", template.getVictorySound());
         yaml.set("victory-sound.volume", template.getVictorySoundVolume());
         yaml.set("victory-sound.pitch", template.getVictorySoundPitch());
         yaml.set("cooldown.mode", template.getCooldownMode().name());
-        yaml.set("cooldown.minutes", template.getCooldownMinutes());
+        yaml.set("cooldown.seconds", template.getCooldownSeconds());
+        yaml.set("cooldown.minutes", Math.max(1, template.getCooldownSeconds() / 60));
         yaml.set("roll-count", template.getRollCount());
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> list = new ArrayList<>();
         for (LootItem loot : template.getRewards()) {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("chance", TextUtil.roundChance(loot.getChance()));
+            map.put("broadcast", loot.isBroadcast());
+            if (loot.getBroadcastMessage() != null && !loot.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", loot.getBroadcastMessage());
+            }
+            if (loot.getLimitServerDaily() > 0) {
+                map.put("limit-server-daily", loot.getLimitServerDaily());
+            }
+            if (loot.getLimitServerMonthly() > 0) {
+                map.put("limit-server-monthly", loot.getLimitServerMonthly());
+            }
+            if (loot.getLimitPlayerDaily() > 0) {
+                map.put("limit-player-daily", loot.getLimitPlayerDaily());
+            }
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -381,7 +465,7 @@ public class SpawnerTemplateManager {
         if (loc == null || template == null || playerUuids == null) return;
         String key = toLocationKey(loc);
         long now = System.currentTimeMillis();
-        long expireTime = now + (long) template.getCooldownMinutes() * 60L * 1000L;
+        long expireTime = now + (long) template.getCooldownSeconds() * 1000L;
 
         switch (template.getCooldownMode()) {
             case ONCE_PER_PLAYER -> {
@@ -416,6 +500,7 @@ public class SpawnerTemplateManager {
     public void registerSpawner(Location loc, String templateName) {
         if (loc == null || templateName == null) return;
         String key = toLocationKey(loc);
+        locationCache.put(key, loc.clone());
         placedSpawners.put(key, templateName);
         saveRuntimeData();
     }
@@ -423,13 +508,21 @@ public class SpawnerTemplateManager {
     public void unregisterSpawner(Location loc) {
         if (loc == null) return;
         String key = toLocationKey(loc);
+        locationCache.remove(key);
         cancelBattleSession(key);
         placedSpawners.remove(key);
         saveRuntimeData();
     }
 
+    public Map<String, String> getPlacedSpawners() {
+        return Collections.unmodifiableMap(placedSpawners);
+    }
+
     public Location parseLocation(String locKey) {
         if (locKey == null || locKey.isEmpty()) return null;
+        Location cached = locationCache.get(locKey);
+        if (cached != null) return cached;
+
         String[] parts = locKey.split(":");
         if (parts.length != 4) return null;
         World world = Bukkit.getWorld(parts[0]);
@@ -438,7 +531,9 @@ public class SpawnerTemplateManager {
             int x = Integer.parseInt(parts[1]);
             int y = Integer.parseInt(parts[2]);
             int z = Integer.parseInt(parts[3]);
-            return new Location(world, x, y, z);
+            Location loc = new Location(world, x, y, z);
+            locationCache.put(locKey, loc);
+            return loc;
         } catch (NumberFormatException e) {
             return null;
         }
@@ -659,8 +754,24 @@ public class SpawnerTemplateManager {
                 continue;
             }
 
+            // 視野守衛 (View Guard): 若周圍 48 格內無任何玩家，不執行方塊狀態維護，大幅節省伺服器算力
+            List<Player> nearbyGuardPlayers = new ArrayList<>(loc.getWorld().getNearbyPlayers(loc, 48));
+            if (nearbyGuardPlayers.isEmpty()) {
+                continue;
+            }
+
+            // 自動淨化周圍玩家的不祥之兆與試煉預兆，徹底杜絕外觀受不祥藥水干擾
+            for (Player p : nearbyGuardPlayers) {
+                if (p.hasPotionEffect(PotionEffectType.BAD_OMEN)) p.removePotionEffect(PotionEffectType.BAD_OMEN);
+                if (p.hasPotionEffect(PotionEffectType.TRIAL_OMEN)) p.removePotionEffect(PotionEffectType.TRIAL_OMEN);
+                if (p.hasPotionEffect(PotionEffectType.RAID_OMEN)) p.removePotionEffect(PotionEffectType.RAID_OMEN);
+            }
+
             Block block = loc.getBlock();
             if (block.getType() != Material.TRIAL_SPAWNER) continue;
+
+            // 確保注入空 PlayerDetector 遮斷原版偵測
+            TrialSpawnerNmsUtil.disablePlayerDetector(block, plugin.getLogger());
 
             boolean inCd = isSpawnerInCooldown(locKey, template);
             if (block.getBlockData() instanceof org.bukkit.block.data.type.TrialSpawner data) {
@@ -686,7 +797,8 @@ public class SpawnerTemplateManager {
                 }
 
                 // 核心防護 2：TileState 不祥屬性、冷卻時間與清空原版追蹤玩家 (防止靠近偽觸發)
-                if (block.getState() instanceof TrialSpawner ts) {
+                // 使用 Paper block.getState(false) 避免深層 NBT 快照複製，降低 GC 負擔
+                if (block.getState(false) instanceof TrialSpawner ts) {
                     boolean stateChanged = false;
 
                     if (ts.isOminous() != template.isOminous()) {
@@ -744,6 +856,11 @@ public class SpawnerTemplateManager {
                 continue;
             }
 
+            // 視距守衛 (View Guard)：周圍 48 格內無任何在線玩家時直接略過，避免無效的 NMS 反射更新與封包負載
+            if (loc.getWorld().getNearbyPlayers(loc, 48).isEmpty()) {
+                continue;
+            }
+
             Block block = loc.getBlock();
             if (block.getType() != Material.TRIAL_SPAWNER) continue;
 
@@ -752,13 +869,12 @@ public class SpawnerTemplateManager {
             EntityType targetType = currentEntry.getPreviewEntityType();
             if (targetType == null) continue;
 
-            if (TrialSpawnerNmsUtil.setSpawnerMob(block, targetType, template.isOminous(), plugin.getLogger())) {
-                plugin.logConsole("&d[試煉生怪磚·輪播]&7 " + locKey + " &8➜ &7輪換展示: &e" + targetType.name() + " &8(&7第 &f" + (index + 1) + "/" + pool.size() + "&7 隻&8)");
-            }
+            TrialSpawnerNmsUtil.setSpawnerMob(block, targetType, template.isOminous(), plugin.getLogger());
         }
     }
 
     private void tickPlayerDetection() {
+        long now = System.currentTimeMillis();
         for (Map.Entry<String, String> entry : placedSpawners.entrySet()) {
             String locKey = entry.getKey();
             if (activeBattles.containsKey(locKey)) {
@@ -768,27 +884,34 @@ public class SpawnerTemplateManager {
             SpawnerTemplate template = getTemplate(entry.getValue());
             if (template == null) continue;
 
+            // 全域冷卻前置過濾：若在冷卻中直接跳過，完全避免解析 Location 與 Chunk 檢查
+            if (template.getCooldownMode() == VaultCooldownMode.GLOBAL_COOLDOWN) {
+                Long expire = globalCooldowns.get(locKey);
+                if (expire != null && expire > now) {
+                    continue; // 仍在全域冷卻中
+                }
+            }
+
             Location loc = parseLocation(locKey);
             if (loc == null || loc.getWorld() == null || !loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
                 continue;
             }
 
-            // 檢查全域冷卻
-            if (template.getCooldownMode() == VaultCooldownMode.GLOBAL_COOLDOWN) {
-                Long expire = globalCooldowns.get(locKey);
-                if (expire != null && expire > System.currentTimeMillis()) {
-                    continue; // 仍在全域冷卻中
-                }
-            }
-
-            // 搜尋感應範圍內的合格玩家
-            double rangeSq = Math.pow(template.getPlayerRange(), 2);
+            // 空間索引搜尋感應範圍內的合格玩家 (避免遍歷世界所有無關玩家)
+            double range = template.getPlayerRange();
+            double rangeSq = range * range;
             List<Player> eligiblePlayers = new ArrayList<>();
 
-            for (Player p : loc.getWorld().getPlayers()) {
+            for (Player p : loc.getWorld().getNearbyPlayers(loc, range)) {
                 if (p.isDead() || !p.isValid()) continue;
                 GameMode gm = p.getGameMode();
                 if (gm != GameMode.SURVIVAL && gm != GameMode.ADVENTURE) continue;
+
+                if (!template.isOminous()) {
+                    if (p.hasPotionEffect(PotionEffectType.BAD_OMEN)) p.removePotionEffect(PotionEffectType.BAD_OMEN);
+                    if (p.hasPotionEffect(PotionEffectType.TRIAL_OMEN)) p.removePotionEffect(PotionEffectType.TRIAL_OMEN);
+                    if (p.hasPotionEffect(PotionEffectType.RAID_OMEN)) p.removePotionEffect(PotionEffectType.RAID_OMEN);
+                }
 
                 if (p.getLocation().distanceSquared(loc) <= rangeSq) {
                     // 檢查玩家冷卻資格
@@ -955,6 +1078,10 @@ public class SpawnerTemplateManager {
     }
 
     public void saveRuntimeData() {
+        saveRuntimeData(false);
+    }
+
+    public void saveRuntimeData(boolean sync) {
         YamlConfiguration yaml = new YamlConfiguration();
 
         // 儲存已放置生怪磚
@@ -988,10 +1115,21 @@ public class SpawnerTemplateManager {
             yaml.set("rewarded_players." + entry.getKey(), list);
         }
 
-        try {
-            yaml.save(runtimeFile);
-        } catch (IOException e) {
-            plugin.logWarn("&5[試煉生怪磚·資料]&c 儲存試煉生怪磚運行期資料失敗: " + e.getMessage());
+        // 運行期間使用非同步執行緒寫入檔案，徹底避免伺服器主執行緒因硬碟 I/O 阻塞造成 TPS 波動
+        if (sync || !plugin.isEnabled()) {
+            try {
+                yaml.save(runtimeFile);
+            } catch (IOException e) {
+                plugin.logWarn("&5[試煉生怪磚·資料]&c 儲存試煉生怪磚運行期資料失敗: " + e.getMessage());
+            }
+        } else {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    yaml.save(runtimeFile);
+                } catch (IOException e) {
+                    plugin.logWarn("&5[試煉生怪磚·資料]&c 儲存試煉生怪磚運行期資料失敗: " + e.getMessage());
+                }
+            });
         }
     }
 }

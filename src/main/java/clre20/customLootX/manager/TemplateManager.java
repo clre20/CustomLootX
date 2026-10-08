@@ -63,7 +63,13 @@ public class TemplateManager {
         }
         String displayName = yaml.getString("display-name", "&e自訂可疑方塊: " + name);
         boolean resetEnabled = yaml.getBoolean("reset.enabled", false);
-        int resetMinutes = Math.max(1, yaml.getInt("reset.minutes", 5));
+        int resetSeconds;
+        if (yaml.contains("reset.seconds")) {
+            resetSeconds = Math.max(1, yaml.getInt("reset.seconds"));
+        } else {
+            resetSeconds = Math.max(1, yaml.getInt("reset.minutes", 5) * 60);
+        }
+        String broadcastMessage = yaml.getString("broadcast-message", null);
 
         List<LootItem> items = new ArrayList<>();
         if (yaml.isList("items")) {
@@ -71,6 +77,9 @@ public class TemplateManager {
             for (Map<?, ?> map : list) {
                 double chance = TextUtil.roundChance(map.containsKey("chance") ? ((Number) map.get("chance")).doubleValue() : 0.0);
                 boolean isAir = map.containsKey("is-air") && Boolean.parseBoolean(String.valueOf(map.get("is-air")));
+                boolean broadcast = map.containsKey("broadcast") && Boolean.parseBoolean(String.valueOf(map.get("broadcast")));
+                String itemBroadcastMsg = map.containsKey("broadcast-message") ? String.valueOf(map.get("broadcast-message")) : null;
+
                 ItemStack item = null;
                 if (!isAir && map.containsKey("item")) {
                     Object itemObj = map.get("item");
@@ -78,15 +87,24 @@ public class TemplateManager {
                         item = is;
                     }
                 }
+                int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
+                LootItem lootItem;
                 if (isAir || item == null) {
-                    items.add(new LootItem(chance, true));
+                    lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                 } else {
-                    items.add(new LootItem(item, chance));
+                    lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                 }
+                lootItem.setLimitServerDaily(limitServerDaily);
+                lootItem.setLimitServerMonthly(limitServerMonthly);
+                lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                items.add(lootItem);
             }
         }
 
-        return new LootTemplate(name, type, displayName, resetEnabled, resetMinutes, items);
+        return new LootTemplate(name, type, displayName, resetEnabled, resetSeconds, items, broadcastMessage);
     }
 
     public boolean saveTemplate(LootTemplate template) {
@@ -101,7 +119,11 @@ public class TemplateManager {
         yaml.set("type", template.getType().name());
         yaml.set("display-name", template.getDisplayName());
         yaml.set("reset.enabled", template.isResetEnabled());
+        yaml.set("reset.seconds", template.getResetSeconds());
         yaml.set("reset.minutes", template.getResetMinutes());
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> itemsList = new ArrayList<>();
         for (int i = 0; i < template.getItems().size(); i++) {
@@ -110,6 +132,19 @@ public class TemplateManager {
             map.put("slot", i);
             map.put("chance", item.getChance());
             map.put("is-air", item.isAir());
+            map.put("broadcast", item.isBroadcast());
+            if (item.getBroadcastMessage() != null && !item.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", item.getBroadcastMessage());
+            }
+            if (item.getLimitServerDaily() > 0) {
+                map.put("limit-server-daily", item.getLimitServerDaily());
+            }
+            if (item.getLimitServerMonthly() > 0) {
+                map.put("limit-server-monthly", item.getLimitServerMonthly());
+            }
+            if (item.getLimitPlayerDaily() > 0) {
+                map.put("limit-player-daily", item.getLimitPlayerDaily());
+            }
             if (!item.isAir() && item.getItem() != null) {
                 map.put("item", item.getItem());
             }

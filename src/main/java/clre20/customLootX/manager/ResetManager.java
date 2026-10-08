@@ -50,9 +50,10 @@ public class ResetManager {
 
     /**
      * Schedule a reset task for a suspicious block that has been brushed.
+     * @param seconds delay in seconds before resetting
      */
-    public void scheduleReset(Location loc, String templateName, int minutes) {
-        if (loc == null || loc.getWorld() == null || templateName == null || minutes <= 0) {
+    public void scheduleReset(Location loc, String templateName, int seconds) {
+        if (loc == null || loc.getWorld() == null || templateName == null || seconds <= 0) {
             return;
         }
 
@@ -63,7 +64,7 @@ public class ResetManager {
         }
 
         UUID sessionId = UUID.randomUUID();
-        long delayTicks = (long) minutes * 60L * 20L;
+        long delayTicks = (long) seconds * 20L;
 
         ResetSession session = new ResetSession(sessionId, loc, templateName, delayTicks);
 
@@ -84,7 +85,9 @@ public class ResetManager {
                 "%y%", loc.getBlockY(),
                 "%z%", loc.getBlockZ(),
                 "%name%", templateName,
-                "%minutes%", minutes
+                "%time%", clre20.customLootX.util.TextUtil.formatTimeSeconds(seconds),
+                "%seconds%", seconds,
+                "%minutes%", Math.max(1, (int) Math.ceil((double) seconds / 60.0))
         );
     }
 
@@ -124,10 +127,22 @@ public class ResetManager {
         Location loc = session.location;
         if (loc.getWorld() == null) return;
 
-        // Ensure chunk is loaded
-        if (!loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
-            loc.getWorld().getChunkAt(loc);
+        int chunkX = loc.getBlockX() >> 4;
+        int chunkZ = loc.getBlockZ() >> 4;
+
+        // 非同步區塊載入：若區塊尚未載入，改用 Paper getChunkAtAsync 避免主執行緒同步卡頓
+        if (!loc.getWorld().isChunkLoaded(chunkX, chunkZ)) {
+            loc.getWorld().getChunkAtAsync(chunkX, chunkZ).thenAccept(chunk -> {
+                Bukkit.getScheduler().runTask(plugin, () -> applyResetBlock(loc, session));
+            });
+            return;
         }
+
+        applyResetBlock(loc, session);
+    }
+
+    private void applyResetBlock(Location loc, ResetSession session) {
+        if (loc.getWorld() == null) return;
 
         Block block = loc.getBlock();
         // Crucial safety check: The block must still be the brushed ordinary sand or gravel!
@@ -162,7 +177,7 @@ public class ResetManager {
 
         // Schedule 1 tick later to guarantee BlockEntity is completely instantiated in the chunk
         Bukkit.getScheduler().runTask(plugin, () -> {
-            if (block.getState() instanceof BrushableBlock brushable) {
+            if (block.getState(false) instanceof BrushableBlock brushable) {
                 // Clear any vanilla archaeology loot table
                 brushable.clearLootTable();
                 brushable.setLootTable(null);

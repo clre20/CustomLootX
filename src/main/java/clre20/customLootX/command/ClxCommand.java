@@ -26,6 +26,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class ClxCommand implements CommandExecutor, TabCompleter {
@@ -38,20 +40,18 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        // 1. /clx 或 /clx help：所有玩家皆可執行查看說明
-        if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
-            sendHelp(sender, label);
-            return true;
-        }
-
-        // 2. 其他所有子指令：只能由 OP 等級 2 以上（含）或具備 customlootx.admin 權限的管理者執行
+        // 所有指令只能由 OP 等級 2 以上（含）或具備 customlootx.admin 權限的管理者執行
         if (!PermissionUtil.hasAdminPermission(sender)) {
             plugin.getConfigManager().send(sender, "no-permission");
             return true;
         }
 
-        String sub = args[0].toLowerCase();
+        if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
+            sendHelp(sender, label);
+            return true;
+        }
 
+        String sub = args[0].toLowerCase();
         switch (sub) {
             case "create" -> handleCreate(sender, label, args);
             case "give" -> handleGive(sender, label, args);
@@ -60,6 +60,8 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
             case "list" -> handleList(sender, label, args);
             case "delete" -> handleDelete(sender, label, args);
             case "reload" -> handleReload(sender, label);
+            case "checklimit" -> handleCheckLimit(sender, label, args);
+            case "resetlimit" -> handleResetLimit(sender, label, args);
             default -> sendHelp(sender, label);
         }
 
@@ -75,6 +77,8 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.list", "&e/%label% list [suspicious|vault|spawner] &7- 列出所有已儲存的配置", "%label%", label));
         sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.delete", "&e/%label% delete <suspicious|vault|spawner> <名稱> &7- 刪除指定的配置檔案", "%label%", label));
         sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.reload", "&e/%label% reload &7- 重新讀取所有設定與資料檔", "%label%", label));
+        sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.checklimit", "&e/%label% checklimit [玩家|all] &7- 查詢今日物品已出貨累計次數", "%label%", label));
+        sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.resetlimit", "&e/%label% resetlimit [玩家|all] &7- 重設出貨上限紀錄", "%label%", label));
         sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.footer", "&8=============================================="));
     }
 
@@ -342,7 +346,15 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
                 plugin.getConfigManager().playSound(player, "error");
                 return;
             }
-            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, template.cloneTemplate(), null, true);
+
+            clre20.customLootX.model.DraftSession draft = plugin.getDraftManager().findDraftByOriginalName(clre20.customLootX.model.DraftType.SPAWNER, name);
+            SpawnerWizardContext context;
+            if (draft != null && draft.getTemplateData() instanceof SpawnerTemplate dt) {
+                context = new SpawnerWizardContext(plugin, player, dt, null, true, name, draft.getDraftId(), true);
+                plugin.getConfigManager().send(player, "draft-loaded");
+            } else {
+                context = new SpawnerWizardContext(plugin, player, template.cloneTemplate(), null, true, name, null, false);
+            }
             new SpawnerWizardStep1Gui(context).open();
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().log("cmd-edit-spawner", "%player%", player.getName(), "%label%", label, "%name%", name);
@@ -353,7 +365,15 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
                 plugin.getConfigManager().playSound(player, "error");
                 return;
             }
-            VaultWizardContext context = new VaultWizardContext(plugin, player, template.cloneTemplate(), null, true);
+
+            clre20.customLootX.model.DraftSession draft = plugin.getDraftManager().findDraftByOriginalName(clre20.customLootX.model.DraftType.VAULT, name);
+            VaultWizardContext context;
+            if (draft != null && draft.getTemplateData() instanceof VaultTemplate vt) {
+                context = new VaultWizardContext(plugin, player, vt, null, true, name, draft.getDraftId(), true);
+                plugin.getConfigManager().send(player, "draft-loaded");
+            } else {
+                context = new VaultWizardContext(plugin, player, template.cloneTemplate(), null, true, name, null, false);
+            }
             new VaultWizardStep1Gui(context).open();
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().log("cmd-edit-vault", "%player%", player.getName(), "%label%", label, "%name%", name);
@@ -364,7 +384,15 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
                 plugin.getConfigManager().playSound(player, "error");
                 return;
             }
-            WizardContext context = new WizardContext(plugin, player, template.cloneTemplate(), false);
+
+            clre20.customLootX.model.DraftSession draft = plugin.getDraftManager().findDraftByOriginalName(clre20.customLootX.model.DraftType.SUSPICIOUS, name);
+            WizardContext context;
+            if (draft != null && draft.getTemplateData() instanceof LootTemplate lt) {
+                context = new WizardContext(plugin, player, lt, false, null, draft.getDraftId(), true);
+                plugin.getConfigManager().send(player, "draft-loaded");
+            } else {
+                context = new WizardContext(plugin, player, template.cloneTemplate(), false, null, null, false);
+            }
             context.openStep1();
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().log("cmd-edit", "%player%", player.getName(), "%label%", label, "%name%", name);
@@ -392,7 +420,7 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
             } else {
                 for (LootTemplate t : plugin.getTemplateManager().getAllTemplates()) {
                     String typeStr = (t.getType() == Material.SUSPICIOUS_SAND) ? "&e沙" : "&7礫";
-                    String resetStr = t.isResetEnabled() ? ("&b[重置: " + t.getResetMinutes() + "m]") : "&8[無重置]";
+                    String resetStr = t.isResetEnabled() ? ("&b[重置: " + TextUtil.formatTimeSeconds(t.getResetSeconds()) + "]") : "&8[無重置]";
                     sender.sendMessage(TextUtil.parse(String.format("&f- &e%s &7(%s&7) &a[100.00%%] %s &7- 包含 &f%d &7件物品",
                             t.getName(), typeStr, resetStr, t.getItems().size())));
                 }
@@ -406,7 +434,10 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
             } else {
                 for (VaultTemplate vt : plugin.getVaultTemplateManager().getAllTemplates()) {
                     String typeStr = vt.isOminous() ? "&5不祥寶庫" : "&6普通寶庫";
-                    String modeStr = "&d[" + vt.getCooldownMode().getDisplay() + "]";
+                    String timeStr = (vt.getCooldownMode() == clre20.customLootX.model.VaultCooldownMode.ONCE_PER_PLAYER)
+                            ? ""
+                            : (": " + TextUtil.formatTimeSeconds(vt.getCooldownSeconds()));
+                    String modeStr = "&d[" + vt.getCooldownMode().getDisplay() + timeStr + "]";
                     sender.sendMessage(TextUtil.parse(String.format("&f- &e%s &7(%s&7) &a[100.00%%] %s &7- 出貨 &a%d &7件 - 包含 &f%d &7項掉落",
                             vt.getName(), typeStr, modeStr, vt.getRollCount(), vt.getItems().size())));
                 }
@@ -423,7 +454,10 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
                     String mobStr = (st.getMobPool().size() > 1)
                             ? ("&c" + st.getMobPool().size() + " 種怪物 (機率)")
                             : ("&c" + (st.getMobPool().isEmpty() ? TextUtil.getMobDisplayName(st.getSpawnedType()) : st.getMobPool().get(0).getDisplayName()));
-                    String modeStr = "&d[" + st.getCooldownMode().getDisplay() + "]";
+                    String timeStr = (st.getCooldownMode() == clre20.customLootX.model.VaultCooldownMode.ONCE_PER_PLAYER)
+                            ? ""
+                            : (": " + TextUtil.formatTimeSeconds(st.getCooldownSeconds()));
+                    String modeStr = "&d[" + st.getCooldownMode().getDisplay() + timeStr + "]";
                     sender.sendMessage(TextUtil.parse(String.format("&f- &e%s &7(%s&7) 生物: %s &a[100.00%%] %s &7- 目標: &f%d &7隻 - 出貨 &a%d &7件 - 掉落池 &f%d &7項",
                             st.getName(), typeStr, mobStr, modeStr, st.getTotalMobs(), st.getRollCount(), st.getRewards().size())));
                 }
@@ -476,30 +510,111 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
         plugin.getTemplateManager().loadAll();
         plugin.getVaultTemplateManager().loadAll();
         plugin.getSpawnerTemplateManager().loadAll();
+        plugin.getLootLimitManager().load();
         plugin.getConfigManager().send(sender, "reload-success");
         plugin.getConfigManager().log("cmd-reload", "%sender%", sender.getName(), "%label%", label);
     }
 
-    @Override
-    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
-        boolean isAdmin = PermissionUtil.hasAdminPermission(sender);
+    private void handleResetLimit(CommandSender sender, String label, String[] args) {
+        if (args.length >= 2 && !args[1].equalsIgnoreCase("all")) {
+            org.bukkit.OfflinePlayer target = org.bukkit.Bukkit.getOfflinePlayer(args[1]);
+            plugin.getLootLimitManager().resetPlayerLimits(target.getUniqueId());
+            sender.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&a已重設玩家 &e" + args[1] + "&a 的今日出貨上限紀錄！"));
+        } else {
+            plugin.getLootLimitManager().resetAllLimits();
+            sender.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&a已成功重設清空全服所有出貨上限紀錄！"));
+        }
+    }
 
-        if (args.length == 1) {
-            if (isAdmin) {
-                List<String> subs = Arrays.asList("help", "create", "give", "key", "edit", "list", "delete", "reload");
-                return filter(subs, args[0]);
-            } else {
-                return filter(Collections.singletonList("help"), args[0]);
-            }
+    private void handleCheckLimit(CommandSender sender, String label, String[] args) {
+        if (!PermissionUtil.hasAdminPermission(sender)) {
+            plugin.getConfigManager().send(sender, "no-permission");
+            return;
         }
 
-        if (!isAdmin) {
+        // 管理員查詢 (可查自己、指定玩家或 all 全服所有人)
+        if (args.length >= 2) {
+            String targetArg = args[1];
+            if (targetArg.equalsIgnoreCase("all")) {
+                // 管理員查全服所有人
+                showAllPlayersLimits(sender);
+                return;
+            }
+            // 管理員查指定玩家
+            org.bukkit.OfflinePlayer target = Bukkit.getOfflinePlayer(targetArg);
+            String targetName = target.getName() != null ? target.getName() : targetArg;
+            showPlayerLimit(sender, targetName, target.getUniqueId(), true);
+        } else {
+            // 管理員未輸入參數：若為玩家顯示自己並提示管理員進階指令，若為控制台則提示用法
+            if (sender instanceof Player player) {
+                showPlayerLimit(sender, player.getName(), player.getUniqueId(), false);
+                sender.sendMessage(TextUtil.parse("&7(管理員提示: 可使用 &e/" + label + " checklimit <玩家|all>&7 查詢指定玩家或全體玩家)"));
+            } else {
+                sender.sendMessage(TextUtil.parse("&c後台控制台請指定參數: /" + label + " checklimit <玩家|all>"));
+            }
+        }
+    }
+
+    private void showPlayerLimit(CommandSender sender, String targetName, UUID targetUuid, boolean showAdminPrefix) {
+        Map<String, Integer> counts = plugin.getLootLimitManager().getPlayerTodayCounts(targetUuid);
+        String headerTitle = showAdminPrefix ? ("&6玩家 &e" + targetName + " &6今日出貨統計") : "&6【我的今日出貨額度統計】";
+        sender.sendMessage(TextUtil.parse("&8============ " + headerTitle + " &8============"));
+        if (counts.isEmpty()) {
+            sender.sendMessage(TextUtil.parse("&7今日尚無任何受限制物品的出貨紀錄。"));
+        } else {
+            for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+                sender.sendMessage(TextUtil.parse(" &7- &f" + entry.getKey() + ": 今日已出貨 &e" + entry.getValue() + " &7次"));
+            }
+        }
+        sender.sendMessage(TextUtil.parse("&8=========================================================="));
+    }
+
+    private void showAllPlayersLimits(CommandSender sender) {
+        Map<UUID, Map<String, Integer>> allData = plugin.getLootLimitManager().getAllPlayersTodayCounts();
+        sender.sendMessage(TextUtil.parse("&8============ &6全伺服器今日所有玩家出貨統計 &8============"));
+        if (allData.isEmpty()) {
+            sender.sendMessage(TextUtil.parse("&7今日全伺服器尚無任何玩家出貨紀錄。"));
+        } else {
+            for (Map.Entry<UUID, Map<String, Integer>> entry : allData.entrySet()) {
+                UUID u = entry.getKey();
+                String pName = u.toString();
+                Player onlineP = Bukkit.getPlayer(u);
+                if (onlineP != null) {
+                    pName = onlineP.getName();
+                } else {
+                    org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(u);
+                    if (op.getName() != null) pName = op.getName();
+                }
+                sender.sendMessage(TextUtil.parse("&e▶ 玩家 " + pName + ":"));
+                for (Map.Entry<String, Integer> itemEntry : entry.getValue().entrySet()) {
+                    sender.sendMessage(TextUtil.parse("   &7- &f" + itemEntry.getKey() + ": &a" + itemEntry.getValue() + " &7次"));
+                }
+            }
+        }
+        sender.sendMessage(TextUtil.parse("&8=========================================================="));
+    }
+
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+        if (!PermissionUtil.hasAdminPermission(sender)) {
             return Collections.emptyList();
         }
 
-        // 第 2 個參數：填入 [suspicious, vault, spawner] 或 key 的寶庫名稱
+        if (args.length == 1) {
+            List<String> subs = Arrays.asList("help", "create", "give", "key", "edit", "list", "delete", "reload", "checklimit", "resetlimit");
+            return filter(subs, args[0]);
+        }
+
+        // 第 2 個參數：checklimit / resetlimit 補全 (管理員可補全 all 與線上玩家)
         if (args.length == 2) {
             String sub = args[0].toLowerCase();
+            if (sub.equals("checklimit") || sub.equals("resetlimit")) {
+                List<String> suggestions = new ArrayList<>();
+                suggestions.add("all");
+                suggestions.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList());
+                return filter(suggestions, args[1]);
+            }
+
             if (sub.equals("key")) {
                 return filter(new ArrayList<>(plugin.getVaultTemplateManager().getTemplateNames()), args[1]);
             }

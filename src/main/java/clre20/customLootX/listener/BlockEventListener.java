@@ -224,6 +224,32 @@ public class BlockEventListener implements Listener {
                     }
                 }
 
+                LootTemplate template = (templateName != null && !templateName.isEmpty())
+                        ? plugin.getTemplateManager().getTemplate(templateName)
+                        : null;
+
+                // 檢查出貨上限防火牆：若抽到的東西已達到限制，排除該選項並照樣抽獎
+                clre20.customLootX.model.LootItem matchedLootItem = null;
+                if (template != null) {
+                    boolean needReroll = false;
+                    if (expectedItem != null && !expectedItem.getType().isAir()) {
+                        matchedLootItem = template.findLootItem(expectedItem);
+                        if (matchedLootItem != null && plugin.getLootLimitManager().isLimitReached("suspicious", template.getName(), matchedLootItem, player.getUniqueId())) {
+                            needReroll = true;
+                        }
+                    }
+                    if (needReroll) {
+                        // 排除已達限制的選項，重新抽獎
+                        matchedLootItem = template.rollLoot(plugin, player.getUniqueId());
+                        expectedItem = (matchedLootItem != null && !matchedLootItem.isAir() && matchedLootItem.getItem() != null)
+                                ? matchedLootItem.getItem().clone()
+                                : null;
+                    }
+                    if (matchedLootItem != null && !matchedLootItem.isAir() && matchedLootItem.getItem() != null) {
+                        plugin.getLootLimitManager().recordDrop("suspicious", template.getName(), matchedLootItem, player.getUniqueId());
+                    }
+                }
+
                 // 3. Ensure exact drop match and location
                 if (expectedItem == null || expectedItem.getType().isAir()) {
                     for (Item itemEntity : event.getItems()) {
@@ -252,11 +278,9 @@ public class BlockEventListener implements Listener {
                 }
 
                 // Detailed console log for brushing completion
-                LootTemplate template = (templateName != null && !templateName.isEmpty())
-                        ? plugin.getTemplateManager().getTemplate(templateName)
-                        : null;
                 double chance = (template != null) ? template.getItemChance(expectedItem) : 0.0;
                 String itemDesc = clre20.customLootX.util.TextUtil.getItemDescription(expectedItem);
+                String itemName = clre20.customLootX.util.TextUtil.getItemName(expectedItem);
 
                 if (expectedItem == null || expectedItem.getType().isAir()) {
                     plugin.getConfigManager().log("brush-air",
@@ -266,6 +290,9 @@ public class BlockEventListener implements Listener {
                             "%y%", loc.getBlockY(),
                             "%z%", loc.getBlockZ(),
                             "%item%", itemDesc,
+                            "%items%", itemDesc,
+                            "%item_name%", itemName,
+                            "%item_names%", itemName,
                             "%name%", templateName != null ? templateName : "未知",
                             "%chance%", clre20.customLootX.util.TextUtil.formatPercent(chance)
                     );
@@ -277,16 +304,33 @@ public class BlockEventListener implements Listener {
                             "%y%", loc.getBlockY(),
                             "%z%", loc.getBlockZ(),
                             "%item%", itemDesc,
+                            "%items%", itemDesc,
+                            "%item_name%", itemName,
+                            "%item_names%", itemName,
+                            "%count%", String.valueOf(expectedItem.getAmount()),
                             "%name%", templateName != null ? templateName : "未知",
                             "%chance%", clre20.customLootX.util.TextUtil.formatPercent(chance),
                             "%face%", face.name()
                     );
+
+                    if (template != null) {
+                        clre20.customLootX.model.LootItem matchedLoot = template.findLootItem(expectedItem);
+                        if (matchedLoot != null && matchedLoot.isBroadcast()) {
+                            plugin.getConfigManager().broadcastReward(
+                                    player,
+                                    "suspicious",
+                                    template.getDisplayName(),
+                                    matchedLoot,
+                                    template.getBroadcastMessage()
+                            );
+                        }
+                    }
                 }
 
                 // 4. Trigger reset if enabled
                 if (template != null && template.isResetEnabled()) {
                     if (!plugin.getResetManager().hasPendingReset(loc)) {
-                        plugin.getResetManager().scheduleReset(loc, templateName, template.getResetMinutes());
+                        plugin.getResetManager().scheduleReset(loc, templateName, template.getResetSeconds());
                     }
                 }
             }

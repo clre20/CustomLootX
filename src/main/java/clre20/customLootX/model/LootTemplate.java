@@ -14,7 +14,8 @@ public class LootTemplate {
     private Material type;
     private String displayName;
     private boolean resetEnabled;
-    private int resetMinutes;
+    private int resetSeconds;
+    private String broadcastMessage;
     private final List<LootItem> items = new ArrayList<>();
 
     public LootTemplate(String name, Material type) {
@@ -22,15 +23,20 @@ public class LootTemplate {
         this.type = (type == Material.SUSPICIOUS_GRAVEL) ? Material.SUSPICIOUS_GRAVEL : Material.SUSPICIOUS_SAND;
         this.displayName = (this.type == Material.SUSPICIOUS_SAND) ? "&e自訂可疑沙: " + name : "&7自訂可疑礫石: " + name;
         this.resetEnabled = false;
-        this.resetMinutes = 5;
+        this.resetSeconds = 300;
     }
 
-    public LootTemplate(String name, Material type, String displayName, boolean resetEnabled, int resetMinutes, List<LootItem> items) {
+    public LootTemplate(String name, Material type, String displayName, boolean resetEnabled, int resetSeconds, List<LootItem> items) {
+        this(name, type, displayName, resetEnabled, resetSeconds, items, null);
+    }
+
+    public LootTemplate(String name, Material type, String displayName, boolean resetEnabled, int resetSeconds, List<LootItem> items, String broadcastMessage) {
         this.name = name;
         this.type = (type == Material.SUSPICIOUS_GRAVEL) ? Material.SUSPICIOUS_GRAVEL : Material.SUSPICIOUS_SAND;
         this.displayName = (displayName != null && !displayName.isEmpty()) ? displayName : (this.type == Material.SUSPICIOUS_SAND ? "&e自訂可疑沙: " + name : "&7自訂可疑礫石: " + name);
         this.resetEnabled = resetEnabled;
-        this.resetMinutes = Math.max(1, resetMinutes);
+        this.resetSeconds = Math.max(1, resetSeconds);
+        this.broadcastMessage = broadcastMessage;
         if (items != null) {
             for (LootItem item : items) {
                 this.items.add(item.cloneItem());
@@ -70,12 +76,20 @@ public class LootTemplate {
         this.resetEnabled = resetEnabled;
     }
 
+    public int getResetSeconds() {
+        return resetSeconds;
+    }
+
+    public void setResetSeconds(int resetSeconds) {
+        this.resetSeconds = Math.max(1, resetSeconds);
+    }
+
     public int getResetMinutes() {
-        return resetMinutes;
+        return Math.max(1, (int) Math.ceil((double) resetSeconds / 60.0));
     }
 
     public void setResetMinutes(int resetMinutes) {
-        this.resetMinutes = Math.max(1, resetMinutes);
+        this.resetSeconds = Math.max(1, resetMinutes) * 60;
     }
 
     public List<LootItem> getItems() {
@@ -115,25 +129,53 @@ public class LootTemplate {
      * Returns null if rolled air or empty.
      */
     public ItemStack rollItem() {
+        return rollItem(null, null);
+    }
+
+    /**
+     * 抽取隨機獎品物件，並過濾掉已達到出貨上限的選項（照樣抽獎）
+     */
+    public LootItem rollLoot(clre20.customLootX.CustomLootX plugin, java.util.UUID playerUuid) {
         if (items.isEmpty()) {
             return null;
         }
-        double roll = ThreadLocalRandom.current().nextDouble() * 100.0;
+
+        // 過濾掉已達到出貨上限的選項
+        List<LootItem> available = new ArrayList<>();
+        double totalWeight = 0.0;
+        for (LootItem lootItem : items) {
+            if (!lootItem.isAir() && lootItem.getItem() != null && plugin != null) {
+                if (plugin.getLootLimitManager().isLimitReached("suspicious", this.name, lootItem, playerUuid)) {
+                    continue; // 達到上限：沒有這個選項！
+                }
+            }
+            available.add(lootItem);
+            totalWeight += lootItem.getChance();
+        }
+
+        if (available.isEmpty() || totalWeight <= 0.0) {
+            return null;
+        }
+
+        double roll = ThreadLocalRandom.current().nextDouble() * totalWeight;
         double accumulated = 0.0;
 
-        for (LootItem lootItem : items) {
+        for (LootItem lootItem : available) {
             accumulated += lootItem.getChance();
             if (roll < accumulated) {
-                if (lootItem.isAir()) {
-                    return null;
-                }
-                return lootItem.getItem();
+                return lootItem;
             }
         }
 
-        // Fallback to last item in case of floating point edge case
-        LootItem last = items.get(items.size() - 1);
-        return last.isAir() ? null : last.getItem();
+        return available.get(available.size() - 1);
+    }
+
+    public ItemStack rollItem(clre20.customLootX.CustomLootX plugin, java.util.UUID playerUuid) {
+        LootItem loot = rollLoot(plugin, playerUuid);
+        if (loot == null || loot.isAir() || loot.getItem() == null) {
+            return null;
+        }
+        return loot.getItem().clone();
     }
 
     public double getItemChance(ItemStack target) {
@@ -151,7 +193,32 @@ public class LootTemplate {
         return 0.0;
     }
 
+    public String getBroadcastMessage() {
+        return broadcastMessage;
+    }
+
+    public void setBroadcastMessage(String broadcastMessage) {
+        this.broadcastMessage = broadcastMessage;
+    }
+
+    public LootItem findLootItem(ItemStack target) {
+        if (target == null || target.getType().isAir()) {
+            for (LootItem li : items) {
+                if (li.isAir()) return li;
+            }
+            return null;
+        }
+        LootItem fallback = null;
+        for (LootItem li : items) {
+            if (!li.isAir() && li.getItem() != null && li.getItem().isSimilar(target)) {
+                if (li.isBroadcast()) return li;
+                if (fallback == null) fallback = li;
+            }
+        }
+        return fallback;
+    }
+
     public LootTemplate cloneTemplate() {
-        return new LootTemplate(this.name, this.type, this.displayName, this.resetEnabled, this.resetMinutes, this.items);
+        return new LootTemplate(this.name, this.type, this.displayName, this.resetEnabled, this.resetSeconds, this.items, this.broadcastMessage);
     }
 }

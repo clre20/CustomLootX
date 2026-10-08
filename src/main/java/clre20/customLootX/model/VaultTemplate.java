@@ -19,20 +19,28 @@ public class VaultTemplate {
     private ItemStack keyItem;
     private int rollCount;
     private VaultCooldownMode cooldownMode;
-    private int cooldownMinutes;
+    private int cooldownSeconds;
+    private String broadcastMessage;
     private List<LootItem> items;
 
     public VaultTemplate(String name, boolean ominous, String displayName, ItemStack keyItem,
-                         int rollCount, VaultCooldownMode cooldownMode, int cooldownMinutes,
+                         int rollCount, VaultCooldownMode cooldownMode, int cooldownSeconds,
                          List<LootItem> items) {
+        this(name, ominous, displayName, keyItem, rollCount, cooldownMode, cooldownSeconds, items, null);
+    }
+
+    public VaultTemplate(String name, boolean ominous, String displayName, ItemStack keyItem,
+                         int rollCount, VaultCooldownMode cooldownMode, int cooldownSeconds,
+                         List<LootItem> items, String broadcastMessage) {
         this.name = name;
         this.ominous = ominous;
         this.displayName = (displayName == null || displayName.isEmpty()) ? name : displayName;
         this.keyItem = (keyItem == null) ? new ItemStack(ominous ? Material.OMINOUS_TRIAL_KEY : Material.TRIAL_KEY) : keyItem.clone();
         this.rollCount = Math.max(1, rollCount);
         this.cooldownMode = (cooldownMode == null) ? VaultCooldownMode.PLAYER_COOLDOWN : cooldownMode;
-        this.cooldownMinutes = Math.max(1, cooldownMinutes);
+        this.cooldownSeconds = Math.max(1, cooldownSeconds);
         this.items = (items == null) ? new ArrayList<>() : new ArrayList<>(items);
+        this.broadcastMessage = broadcastMessage;
     }
 
     public String getName() {
@@ -86,12 +94,20 @@ public class VaultTemplate {
         this.cooldownMode = cooldownMode;
     }
 
+    public int getCooldownSeconds() {
+        return Math.max(1, cooldownSeconds);
+    }
+
+    public void setCooldownSeconds(int cooldownSeconds) {
+        this.cooldownSeconds = Math.max(1, cooldownSeconds);
+    }
+
     public int getCooldownMinutes() {
-        return Math.max(1, cooldownMinutes);
+        return Math.max(1, cooldownSeconds / 60);
     }
 
     public void setCooldownMinutes(int cooldownMinutes) {
-        this.cooldownMinutes = Math.max(1, cooldownMinutes);
+        this.cooldownSeconds = Math.max(1, cooldownMinutes * 60);
     }
 
     public List<LootItem> getItems() {
@@ -114,32 +130,93 @@ public class VaultTemplate {
         return Math.abs(getTotalChance() - 100.0) < 0.0001;
     }
 
+    public String getBroadcastMessage() {
+        return broadcastMessage;
+    }
+
+    public void setBroadcastMessage(String broadcastMessage) {
+        this.broadcastMessage = broadcastMessage;
+    }
+
     /**
-     * 從 100% 掉落池中隨機抽取一項物品（若落空則返回 null）
+     * 從 100% 掉落池中隨機抽取一項 LootItem
      */
-    public ItemStack rollSingleItem() {
+    public LootItem rollSingleLoot() {
+        return rollSingleLoot(null, null);
+    }
+
+    /**
+     * 從掉落池中隨機抽取一項 LootItem（排除已達上限選項，照樣抽獎）
+     */
+    public LootItem rollSingleLoot(clre20.customLootX.CustomLootX plugin, java.util.UUID playerUuid) {
         if (items.isEmpty()) {
             return null;
         }
 
-        double random = ThreadLocalRandom.current().nextDouble() * 100.0;
+        // 過濾掉已達到出貨上限的選項
+        List<LootItem> available = new ArrayList<>();
+        double totalWeight = 0.0;
+        for (LootItem item : items) {
+            if (!item.isAir() && item.getItem() != null && plugin != null) {
+                if (plugin.getLootLimitManager().isLimitReached("vault", this.name, item, playerUuid)) {
+                    continue; // 達到上限：沒有這個選項！
+                }
+            }
+            available.add(item);
+            totalWeight += item.getChance();
+        }
+
+        if (available.isEmpty() || totalWeight <= 0.0) {
+            return null;
+        }
+
+        double random = ThreadLocalRandom.current().nextDouble() * totalWeight;
         double cumulative = 0.0;
 
-        for (LootItem item : items) {
+        for (LootItem item : available) {
             cumulative += item.getChance();
             if (random < cumulative) {
-                if (item.isAir() || item.getItem() == null) {
-                    return null;
-                }
-                return item.getItem().clone();
+                return item;
             }
         }
 
-        LootItem last = items.get(items.size() - 1);
-        if (last.isAir() || last.getItem() == null) {
+        return available.get(available.size() - 1);
+    }
+
+    /**
+     * 依據 rollCount 抽取指定數量的物品物件清單（過濾掉落空者）
+     */
+    public List<LootItem> rollAllLootItems() {
+        return rollAllLootItems(null, null);
+    }
+
+    /**
+     * 依據 rollCount 抽取指定數量的物品物件清單（支援出貨上限防火牆攔截並照樣抽獎）
+     */
+    public List<LootItem> rollAllLootItems(clre20.customLootX.CustomLootX plugin, java.util.UUID playerUuid) {
+        List<LootItem> rolled = new ArrayList<>();
+        int count = getRollCount();
+        for (int i = 0; i < count; i++) {
+            LootItem loot = rollSingleLoot(plugin, playerUuid);
+            if (loot != null && !loot.isAir() && loot.getItem() != null) {
+                rolled.add(loot);
+                if (plugin != null) {
+                    plugin.getLootLimitManager().recordDrop("vault", this.name, loot, playerUuid);
+                }
+            }
+        }
+        return rolled;
+    }
+
+    /**
+     * 從 100% 掉落池中隨機抽取一項物品（若落空則返回 null）
+     */
+    public ItemStack rollSingleItem() {
+        LootItem loot = rollSingleLoot();
+        if (loot == null || loot.isAir() || loot.getItem() == null) {
             return null;
         }
-        return last.getItem().clone();
+        return loot.getItem().clone();
     }
 
     /**
@@ -147,12 +224,8 @@ public class VaultTemplate {
      */
     public List<ItemStack> rollAllItems() {
         List<ItemStack> rolled = new ArrayList<>();
-        int count = getRollCount();
-        for (int i = 0; i < count; i++) {
-            ItemStack item = rollSingleItem();
-            if (item != null && item.getType() != Material.AIR) {
-                rolled.add(item);
-            }
+        for (LootItem loot : rollAllLootItems()) {
+            rolled.add(loot.getItem().clone());
         }
         return rolled;
     }
@@ -173,8 +246,9 @@ public class VaultTemplate {
                 clonedKey,
                 this.rollCount,
                 this.cooldownMode,
-                this.cooldownMinutes,
-                clonedItems
+                this.cooldownSeconds,
+                clonedItems,
+                this.broadcastMessage
         );
     }
 }

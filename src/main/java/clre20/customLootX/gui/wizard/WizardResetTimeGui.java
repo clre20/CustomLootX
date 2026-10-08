@@ -36,56 +36,62 @@ public class WizardResetTimeGui extends CustomGuiHolder {
         }
 
         LootTemplate template = context.getTemplate();
-        int minutes = template.getResetMinutes();
+        int seconds = template.getResetSeconds();
 
-        // Slot 13: Clock showing current minutes
-        String clockName = context.getPlugin().getConfigManager().getText("gui.step2-time.clock-name", "&e目前重置時間: &a%minutes% &e分鐘", "%minutes%", minutes);
+        // Slot 13: Clock showing current time formatted
+        String clockName = context.getPlugin().getConfigManager().getText("gui.step2-time.clock-name", "&e目前重置時間: &a%time%",
+                "%time%", TextUtil.formatTimeSeconds(seconds),
+                "%minutes%", template.getResetMinutes());
         List<String> clockLore = context.getPlugin().getConfigManager().getStringList(
                 "gui.step2-time.clock-lore",
                 List.of(
                         "&7方塊被刷完變為普通方塊後",
                         "&7經過此時間將自動復原並重抽戰利品",
                         "&7",
+                        "&7目前設定: &a" + TextUtil.formatTimeSeconds(seconds),
+                        "&7",
                         "&e請點擊兩側按鈕直接增減時間",
-                        "&7(最低設定為 1 分鐘)"
+                        "&7(最低設定為 1 秒)"
                 ),
-                "%minutes%", minutes
+                "%time%", TextUtil.formatTimeSeconds(seconds),
+                "%minutes%", template.getResetMinutes()
         );
         inventory.setItem(13, createButton(Material.CLOCK, clockName, clockLore));
 
         // Decrease buttons (Left side)
-        String m10Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-minus-10-name", "&c-10 分鐘");
-        List<String> m10Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-minus-10-lore", List.of("&7點擊減少 10 分鐘"));
-        inventory.setItem(10, createButton(Material.RED_CONCRETE, m10Name, m10Lore));
+        String m60Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-minus-60-name", "&c-60s");
+        List<String> m60Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-minus-60-lore", List.of("&7點擊減少 60 秒"));
+        inventory.setItem(10, createButton(Material.RED_CONCRETE, m60Name, m60Lore));
 
-        String m5Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-minus-5-name", "&c-5 分鐘");
-        List<String> m5Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-minus-5-lore", List.of("&7點擊減少 5 分鐘"));
-        inventory.setItem(11, createButton(Material.RED_WOOL, m5Name, m5Lore));
+        String m10Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-minus-10-name", "&c-10s");
+        List<String> m10Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-minus-10-lore", List.of("&7點擊減少 10 秒"));
+        inventory.setItem(11, createButton(Material.RED_TERRACOTTA, m10Name, m10Lore));
 
-        String m1Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-minus-1-name", "&c-1 分鐘");
-        List<String> m1Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-minus-1-lore", List.of("&7點擊減少 1 分鐘"));
+        String m1Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-minus-1-name", "&c-1s");
+        List<String> m1Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-minus-1-lore", List.of("&7點擊減少 1 秒"));
         inventory.setItem(12, createButton(Material.RED_STAINED_GLASS_PANE, m1Name, m1Lore));
 
         // Increase buttons (Right side)
-        String p1Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-plus-1-name", "&a+1 分鐘");
-        List<String> p1Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-plus-1-lore", List.of("&7點擊增加 1 分鐘"));
+        String p1Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-plus-1-name", "&a+1s");
+        List<String> p1Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-plus-1-lore", List.of("&7點擊增加 1 秒"));
         inventory.setItem(14, createButton(Material.LIME_STAINED_GLASS_PANE, p1Name, p1Lore));
 
-        String p5Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-plus-5-name", "&a+5 分鐘");
-        List<String> p5Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-plus-5-lore", List.of("&7點擊增加 5 分鐘"));
-        inventory.setItem(15, createButton(Material.LIME_WOOL, p5Name, p5Lore));
+        String p10Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-plus-10-name", "&a+10s");
+        List<String> p10Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-plus-10-lore", List.of("&7點擊增加 10 秒"));
+        inventory.setItem(15, createButton(Material.LIME_TERRACOTTA, p10Name, p10Lore));
 
-        String p10Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-plus-10-name", "&a+10 分鐘");
-        List<String> p10Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-plus-10-lore", List.of("&7點擊增加 10 分鐘"));
-        inventory.setItem(16, createButton(Material.LIME_CONCRETE, p10Name, p10Lore));
+        String p60Name = context.getPlugin().getConfigManager().getText("gui.step2-time.btn-plus-60-name", "&a+60s");
+        List<String> p60Lore = context.getPlugin().getConfigManager().getStringList("gui.step2-time.btn-plus-60-lore", List.of("&7點擊增加 60 秒"));
+        inventory.setItem(16, createButton(Material.LIME_CONCRETE, p60Name, p60Lore));
 
         // Slot 4: Chat input
-        String chatName = context.getPlugin().getConfigManager().getText("gui.step2-time.chat-input-name", "&b聊天室直接輸入");
+        String chatName = context.getPlugin().getConfigManager().getText("gui.step2-time.chat-input-name", "&b聊天室直接輸入秒數");
         List<String> chatLore = context.getPlugin().getConfigManager().getStringList(
                 "gui.step2-time.chat-input-lore",
                 List.of(
-                        "&7點擊後在聊天室直接輸入數字",
-                        "&7例如輸入: &e15 &7(即為 15 分鐘)"
+                        "&7點擊後在聊天室直接輸入數字 (秒)",
+                        "&7完成後自動轉換為 &e分與秒",
+                        "&7例如輸入: &e90 &7(即為 1分30秒 (90秒))"
                 )
         );
         inventory.setItem(4, createButton(Material.PAPER, chatName, chatLore));
@@ -124,55 +130,31 @@ public class WizardResetTimeGui extends CustomGuiHolder {
         int slot = event.getRawSlot();
         Player player = context.getPlayer();
         LootTemplate template = context.getTemplate();
-        int current = template.getResetMinutes();
 
         switch (slot) {
-            case 10 -> {
-                template.setResetMinutes(Math.max(1, current - 10));
-                context.getPlugin().getConfigManager().playSound(player, "click");
-                render();
-            }
-            case 11 -> {
-                template.setResetMinutes(Math.max(1, current - 5));
-                context.getPlugin().getConfigManager().playSound(player, "click");
-                render();
-            }
-            case 12 -> {
-                template.setResetMinutes(Math.max(1, current - 1));
-                context.getPlugin().getConfigManager().playSound(player, "click");
-                render();
-            }
-            case 14 -> {
-                template.setResetMinutes(current + 1);
-                context.getPlugin().getConfigManager().playSound(player, "click");
-                render();
-            }
-            case 15 -> {
-                template.setResetMinutes(current + 5);
-                context.getPlugin().getConfigManager().playSound(player, "click");
-                render();
-            }
-            case 16 -> {
-                template.setResetMinutes(current + 10);
-                context.getPlugin().getConfigManager().playSound(player, "click");
-                render();
-            }
+            case 10 -> adjustTime(-60, player);
+            case 11 -> adjustTime(-10, player);
+            case 12 -> adjustTime(-1, player);
+            case 14 -> adjustTime(1, player);
+            case 15 -> adjustTime(10, player);
+            case 16 -> adjustTime(60, player);
             case 4 -> {
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 context.setTransitioning(true);
                 context.getPlugin().getChatInputManager().requestInput(
                         player,
-                        context.getPlugin().getConfigManager().getRawMessage("time-prompt"),
+                        context.getPlugin().getConfigManager().getText("messages.time-prompt", "&e請在聊天室輸入自動重置秒數（請輸入大於等於 1 的整數），輸入 &ccancel &e取消："),
                         input -> {
                             context.setTransitioning(false);
                             try {
-                                int val = Integer.parseInt(input);
+                                int val = Integer.parseInt(input.trim());
                                 if (val < 1) {
                                     context.getPlugin().getConfigManager().send(player, "time-min-invalid");
                                     context.getPlugin().getConfigManager().playSound(player, "error");
                                 } else {
-                                    template.setResetMinutes(val);
+                                    template.setResetSeconds(val);
                                     context.getPlugin().getConfigManager().playSound(player, "success");
+                                    player.sendMessage(TextUtil.parse(context.getPlugin().getConfigManager().getPrefix() + "&a已將重置時間設定為: &e" + TextUtil.formatTimeSeconds(val)));
                                 }
                             } catch (NumberFormatException e) {
                                 context.getPlugin().getConfigManager().send(player, "time-invalid");
@@ -192,6 +174,18 @@ public class WizardResetTimeGui extends CustomGuiHolder {
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 context.openStep2();
             }
+        }
+    }
+
+    private void adjustTime(int delta, Player player) {
+        int current = context.getTemplate().getResetSeconds();
+        int newVal = Math.max(1, current + delta);
+        if (newVal != current) {
+            context.getTemplate().setResetSeconds(newVal);
+            context.getPlugin().getConfigManager().playSound(player, "click");
+            render();
+        } else {
+            context.getPlugin().getConfigManager().playSound(player, "error");
         }
     }
 

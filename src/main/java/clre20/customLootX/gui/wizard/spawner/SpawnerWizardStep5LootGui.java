@@ -83,6 +83,16 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
                 for (String line : chanceLore) {
                     currentLore.add(TextUtil.parse(line));
                 }
+                if (loot.isBroadcast()) {
+                    currentLore.add(TextUtil.parse("&6📢 全服獲獎通告: &a【已開啟】"));
+                }
+                if (loot.hasAnyLimit()) {
+                    List<String> limitParts = new ArrayList<>();
+                    if (loot.getLimitServerDaily() > 0) limitParts.add("全服日:" + loot.getLimitServerDaily());
+                    if (loot.getLimitServerMonthly() > 0) limitParts.add("全服月:" + loot.getLimitServerMonthly());
+                    if (loot.getLimitPlayerDaily() > 0) limitParts.add("個人日:" + loot.getLimitPlayerDaily());
+                    currentLore.add(TextUtil.parse("&c🛡️ 出貨上限: &e" + String.join(" &8| &e", limitParts)));
+                }
                 meta.lore(currentLore);
                 displayItem.setItemMeta(meta);
             }
@@ -265,7 +275,7 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
                 int itemIndex = page * ITEMS_PER_PAGE + rawSlot;
                 if (itemIndex < items.size()) {
                     LootItem old = items.get(itemIndex);
-                    items.set(itemIndex, new LootItem(toAdd, old.getChance()));
+                    items.set(itemIndex, new LootItem(toAdd, old.getChance(), old.isBroadcast(), old.getBroadcastMessage(), old.getLimitServerDaily(), old.getLimitServerMonthly(), old.getLimitPlayerDaily()));
                 } else {
                     items.add(new LootItem(toAdd, initChance));
                 }

@@ -125,7 +125,9 @@ public class ItemManager {
                     : plugin.getConfigManager().getText("items.configured.type-gravel", "可疑礫石");
 
             String resetDesc = template.isResetEnabled()
-                    ? plugin.getConfigManager().getText("items.configured.reset-enabled", "&a開啟 (&f%minutes% 分鐘&a)", "%minutes%", template.getResetMinutes())
+                    ? plugin.getConfigManager().getText("items.configured.reset-enabled", "&a開啟 (&f%time%&a)",
+                            "%time%", TextUtil.formatTimeSeconds(template.getResetSeconds()),
+                            "%minutes%", template.getResetMinutes())
                     : plugin.getConfigManager().getText("items.configured.reset-disabled", "&c關閉");
 
             List<Component> lore = new ArrayList<>(plugin.getConfigManager().getComponentList(
@@ -195,6 +197,11 @@ public class ItemManager {
 
     public boolean isCustomLootItem(ItemStack item) {
         if (item == null || item.getType() == Material.AIR) return false;
+        Material mat = item.getType();
+        if (mat != Material.SUSPICIOUS_SAND && mat != Material.SUSPICIOUS_GRAVEL) {
+            return false;
+        }
+        if (!item.hasItemMeta()) return false;
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return false;
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
@@ -316,7 +323,7 @@ public class ItemManager {
             String modeDesc = template.getCooldownMode().getDisplay();
             String timeDesc = (template.getCooldownMode() == VaultCooldownMode.ONCE_PER_PLAYER)
                     ? "&7(永久一次)"
-                    : ("&a" + template.getCooldownMinutes() + " 分鐘");
+                    : ("&a" + TextUtil.formatTimeSeconds(template.getCooldownSeconds()));
 
             List<Component> lore = new ArrayList<>();
             List<String> header = plugin.getConfigManager().getStringList(
@@ -612,7 +619,7 @@ public class ItemManager {
             String modeDesc = template.getCooldownMode().getDisplay();
             String timeDesc = (template.getCooldownMode() == VaultCooldownMode.ONCE_PER_PLAYER)
                     ? "&7(永久一次)"
-                    : ("&a" + template.getCooldownMinutes() + " 分鐘");
+                    : ("&a" + TextUtil.formatTimeSeconds(template.getCooldownSeconds()));
 
             List<Component> lore = new ArrayList<>();
             List<String> header = plugin.getConfigManager().getStringList(
@@ -748,7 +755,12 @@ public class ItemManager {
     // ==========================================
 
     public boolean isDraftItem(ItemStack item) {
-        if (item == null || !item.hasItemMeta()) return false;
+        if (item == null || item.getType() == Material.AIR) return false;
+        Material mat = item.getType();
+        if (mat != Material.SUSPICIOUS_SAND && mat != Material.SUSPICIOUS_GRAVEL && mat != Material.VAULT && mat != Material.TRIAL_SPAWNER) {
+            return false;
+        }
+        if (!item.hasItemMeta()) return false;
         return item.getItemMeta().getPersistentDataContainer().has(KEY_IS_DRAFT, PersistentDataType.BYTE);
     }
 

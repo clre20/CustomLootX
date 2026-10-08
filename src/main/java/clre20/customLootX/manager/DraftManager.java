@@ -18,10 +18,32 @@ public class DraftManager {
     private final CustomLootX plugin;
     private final File baseDraftsDir;
 
+    private final Set<String> activeDraftKeys = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     public DraftManager(CustomLootX plugin) {
         this.plugin = plugin;
         this.baseDraftsDir = new File(plugin.getDataFolder(), "drafts");
         ensureDirectories();
+        refreshActiveDrafts();
+    }
+
+    private String toDraftKey(DraftType type, String draftId) {
+        if (type == null || draftId == null) return "";
+        return type.name() + ":" + draftId.trim().toLowerCase();
+    }
+
+    public void refreshActiveDrafts() {
+        activeDraftKeys.clear();
+        for (DraftType type : DraftType.values()) {
+            File dir = getDraftDir(type);
+            if (!dir.exists()) continue;
+            File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
+            if (files == null) continue;
+            for (File file : files) {
+                String draftId = file.getName().substring(0, file.getName().length() - 4);
+                activeDraftKeys.add(toDraftKey(type, draftId));
+            }
+        }
     }
 
     private void ensureDirectories() {
@@ -54,7 +76,15 @@ public class DraftManager {
     public DraftSession saveDraft(DraftType type, String draftId, String originalName, Object templateData) {
         if (type == null || templateData == null) return null;
         if (draftId == null || draftId.trim().isEmpty()) {
-            draftId = generateDraftId();
+            if (originalName != null && !originalName.trim().isEmpty()) {
+                DraftSession existing = findDraftByOriginalName(type, originalName);
+                if (existing != null) {
+                    draftId = existing.getDraftId();
+                }
+            }
+            if (draftId == null || draftId.trim().isEmpty()) {
+                draftId = generateDraftId();
+            }
         }
 
         File file = new File(getDraftDir(type), draftId + ".yml");
@@ -81,6 +111,7 @@ public class DraftManager {
 
         try {
             yaml.save(file);
+            activeDraftKeys.add(toDraftKey(type, draftId));
             return new DraftSession(draftId, type, originalName, now, expireTime, templateData);
         } catch (IOException e) {
             plugin.logError("&c[草稿·儲存]&c 儲存草稿檔案失敗: " + e.getMessage());
@@ -117,12 +148,62 @@ public class DraftManager {
     }
 
     /**
-     * 檢查草稿檔案是否存在
+     * 檢查草稿檔案是否存在 (純記憶體快速比對，零硬碟 I/O)
      */
     public boolean hasDraft(DraftType type, String draftId) {
         if (type == null || draftId == null || draftId.trim().isEmpty()) return false;
-        File file = new File(getDraftDir(type), draftId + ".yml");
-        return file.exists();
+        return activeDraftKeys.contains(toDraftKey(type, draftId));
+    }
+
+    /**
+     * 依據配置原名搜尋尚未過期的草稿
+     */
+    public DraftSession findDraftByOriginalName(DraftType type, String originalName) {
+        if (type == null || originalName == null || originalName.trim().isEmpty()) return null;
+        File dir = getDraftDir(type);
+        if (!dir.exists()) return null;
+
+        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
+        if (files == null) return null;
+
+        DraftSession newest = null;
+        for (File file : files) {
+            String draftId = file.getName().substring(0, file.getName().length() - 4);
+            DraftSession session = loadDraft(type, draftId);
+            if (session != null && !session.isExpired()) {
+                if (originalName.equalsIgnoreCase(session.getOriginalName())) {
+                    if (newest == null || session.getCreatedTime() > newest.getCreatedTime()) {
+                        newest = session;
+                    }
+                }
+            }
+        }
+        return newest;
+    }
+
+    /**
+     * 依據配置原名刪除所有草稿
+     */
+    public boolean deleteDraftByOriginalName(DraftType type, String originalName) {
+        if (type == null || originalName == null || originalName.trim().isEmpty()) return false;
+        File dir = getDraftDir(type);
+        if (!dir.exists()) return false;
+
+        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
+        if (files == null) return false;
+
+        boolean deleted = false;
+        for (File file : files) {
+            String draftId = file.getName().substring(0, file.getName().length() - 4);
+            DraftSession session = loadDraft(type, draftId);
+            if (session != null && originalName.equalsIgnoreCase(session.getOriginalName())) {
+                if (file.delete()) {
+                    activeDraftKeys.remove(toDraftKey(type, draftId));
+                    deleted = true;
+                }
+            }
+        }
+        return deleted;
     }
 
     /**
@@ -130,6 +211,7 @@ public class DraftManager {
      */
     public boolean deleteDraft(DraftType type, String draftId) {
         if (type == null || draftId == null || draftId.trim().isEmpty()) return false;
+        activeDraftKeys.remove(toDraftKey(type, draftId));
         File file = new File(getDraftDir(type), draftId + ".yml");
         if (file.exists()) {
             return file.delete();
@@ -155,7 +237,9 @@ public class DraftManager {
                     YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
                     long expire = yaml.getLong("draft.expire-time", 0);
                     if (expire > 0 && now > expire) {
+                        String draftId = file.getName().substring(0, file.getName().length() - 4);
                         if (file.delete()) {
+                            activeDraftKeys.remove(toDraftKey(type, draftId));
                             cleaned++;
                         }
                     }
@@ -174,7 +258,11 @@ public class DraftManager {
         yaml.set("type", template.getType().name());
         yaml.set("display-name", template.getDisplayName());
         yaml.set("reset-enabled", template.isResetEnabled());
+        yaml.set("reset-seconds", template.getResetSeconds());
         yaml.set("reset-minutes", template.getResetMinutes());
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> itemsList = new ArrayList<>();
         List<LootItem> items = template.getItems();
@@ -184,6 +272,13 @@ public class DraftManager {
             map.put("slot", i);
             map.put("chance", item.getChance());
             map.put("is-air", item.isAir());
+            map.put("broadcast", item.isBroadcast());
+            if (item.getBroadcastMessage() != null && !item.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", item.getBroadcastMessage());
+            }
+            if (item.getLimitServerDaily() > 0) map.put("limit-server-daily", item.getLimitServerDaily());
+            if (item.getLimitServerMonthly() > 0) map.put("limit-server-monthly", item.getLimitServerMonthly());
+            if (item.getLimitPlayerDaily() > 0) map.put("limit-player-daily", item.getLimitPlayerDaily());
             if (!item.isAir() && item.getItem() != null) {
                 map.put("item", item.getItem());
             }
@@ -201,7 +296,11 @@ public class DraftManager {
         LootTemplate template = new LootTemplate(name, type);
         template.setDisplayName(yaml.getString("display-name", null));
         template.setResetEnabled(yaml.getBoolean("reset-enabled", false));
-        template.setResetMinutes(yaml.getInt("reset-minutes", 5));
+        int resetSeconds = yaml.contains("reset-seconds")
+                ? Math.max(1, yaml.getInt("reset-seconds"))
+                : Math.max(1, yaml.getInt("reset-minutes", 5) * 60);
+        template.setResetSeconds(resetSeconds);
+        template.setBroadcastMessage(yaml.getString("broadcast-message", null));
 
         List<?> list = yaml.getList("items");
         if (list != null) {
@@ -211,15 +310,26 @@ public class DraftManager {
                     Object cObj = map.get("chance");
                     if (cObj instanceof Number n) chance = n.doubleValue();
                     boolean isAir = Boolean.TRUE.equals(map.get("is-air"));
+                    boolean broadcast = Boolean.TRUE.equals(map.get("broadcast"));
+                    String itemBroadcastMsg = (String) map.get("broadcast-message");
+                    int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                    int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                    int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
                     ItemStack item = null;
                     Object iObj = map.get("item");
                     if (iObj instanceof ItemStack is) item = is;
 
+                    LootItem lootItem;
                     if (isAir || item == null) {
-                        template.addItem(new LootItem(chance, true));
+                        lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                     } else {
-                        template.addItem(new LootItem(item, chance));
+                        lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                     }
+                    lootItem.setLimitServerDaily(limitServerDaily);
+                    lootItem.setLimitServerMonthly(limitServerMonthly);
+                    lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                    template.addItem(lootItem);
                 }
             }
         }
@@ -233,12 +343,23 @@ public class DraftManager {
         yaml.set("key-item", template.getKeyItem());
         yaml.set("roll-count", template.getRollCount());
         yaml.set("cooldown.mode", template.getCooldownMode().name());
+        yaml.set("cooldown.seconds", template.getCooldownSeconds());
         yaml.set("cooldown.minutes", template.getCooldownMinutes());
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> list = new ArrayList<>();
         for (LootItem loot : template.getItems()) {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("chance", TextUtil.roundChance(loot.getChance()));
+            map.put("broadcast", loot.isBroadcast());
+            if (loot.getBroadcastMessage() != null && !loot.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", loot.getBroadcastMessage());
+            }
+            if (loot.getLimitServerDaily() > 0) map.put("limit-server-daily", loot.getLimitServerDaily());
+            if (loot.getLimitServerMonthly() > 0) map.put("limit-server-monthly", loot.getLimitServerMonthly());
+            if (loot.getLimitPlayerDaily() > 0) map.put("limit-player-daily", loot.getLimitPlayerDaily());
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -260,7 +381,10 @@ public class DraftManager {
         int rollCount = yaml.getInt("roll-count", 3);
         String modeStr = yaml.getString("cooldown.mode", "PLAYER_COOLDOWN");
         VaultCooldownMode mode = VaultCooldownMode.fromString(modeStr);
-        int cooldownMinutes = yaml.getInt("cooldown.minutes", 10);
+        int cooldownSeconds = yaml.contains("cooldown.seconds")
+                ? yaml.getInt("cooldown.seconds")
+                : yaml.getInt("cooldown.minutes", 10) * 60;
+        String broadcastMessage = yaml.getString("broadcast-message", null);
 
         List<LootItem> items = new ArrayList<>();
         List<?> rawItems = yaml.getList("items");
@@ -271,19 +395,32 @@ public class DraftManager {
                     Object cObj = map.get("chance");
                     if (cObj instanceof Number n) chance = n.doubleValue();
                     boolean isAir = Boolean.TRUE.equals(map.get("is-air"));
+                    boolean broadcast = Boolean.TRUE.equals(map.get("broadcast"));
+                    String itemBroadcastMsg = (String) map.get("broadcast-message");
+                    int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                    int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                    int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
                     ItemStack item = null;
                     Object iObj = map.get("item");
                     if (iObj instanceof ItemStack is) item = is;
 
+                    LootItem lootItem;
                     if (isAir || item == null) {
-                        items.add(new LootItem(chance, true));
+                        lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                     } else {
-                        items.add(new LootItem(item, chance));
+                        lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                     }
+                    lootItem.setLimitServerDaily(limitServerDaily);
+                    lootItem.setLimitServerMonthly(limitServerMonthly);
+                    lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                    items.add(lootItem);
                 }
             }
         }
-        return new VaultTemplate(name, ominous, displayName, keyItem, rollCount, mode, cooldownMinutes, items);
+        VaultTemplate vt = new VaultTemplate(name, ominous, displayName, keyItem, rollCount, mode, Math.max(1, (int) Math.ceil((double) cooldownSeconds / 60.0)), items, broadcastMessage);
+        vt.setCooldownSeconds(cooldownSeconds);
+        return vt;
     }
 
     private void serializeSpawnerTemplate(YamlConfiguration yaml, SpawnerTemplate template) {
@@ -295,6 +432,13 @@ public class DraftManager {
             yaml.set("display-mob-id", template.getDisplayMobId());
         }
         yaml.set("spawned-type", template.getSpawnedType().name());
+        yaml.set("spawn-mode", "SEQUENCE");
+        yaml.set("spawn-sequence", template.getSpawnSequence());
+        List<List<String>> waveData = new ArrayList<>();
+        for (List<String> w : template.getWaves()) {
+            waveData.add(new ArrayList<>(w));
+        }
+        yaml.set("waves", waveData);
 
         List<Map<String, Object>> mobList = new ArrayList<>();
         for (SpawnerMobEntry entry : template.getMobPool()) {
@@ -313,19 +457,31 @@ public class DraftManager {
         yaml.set("wave.simultaneous-mobs", template.getSimultaneousMobs());
         yaml.set("wave.spawn-delay-seconds", template.getSpawnDelaySeconds());
         yaml.set("wave.player-range", template.getPlayerRange());
+        yaml.set("wave.wait-wave-cleared", template.isWaitWaveCleared());
         yaml.set("show-actionbar", template.isShowActionBar());
         yaml.set("victory-sound.enabled", template.isVictorySoundEnabled());
         yaml.set("victory-sound.sound", template.getVictorySound());
         yaml.set("victory-sound.volume", template.getVictorySoundVolume());
         yaml.set("victory-sound.pitch", template.getVictorySoundPitch());
         yaml.set("cooldown.mode", template.getCooldownMode().name());
+        yaml.set("cooldown.seconds", template.getCooldownSeconds());
         yaml.set("cooldown.minutes", template.getCooldownMinutes());
         yaml.set("roll-count", template.getRollCount());
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> list = new ArrayList<>();
         for (LootItem loot : template.getRewards()) {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("chance", TextUtil.roundChance(loot.getChance()));
+            map.put("broadcast", loot.isBroadcast());
+            if (loot.getBroadcastMessage() != null && !loot.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", loot.getBroadcastMessage());
+            }
+            if (loot.getLimitServerDaily() > 0) map.put("limit-server-daily", loot.getLimitServerDaily());
+            if (loot.getLimitServerMonthly() > 0) map.put("limit-server-monthly", loot.getLimitServerMonthly());
+            if (loot.getLimitPlayerDaily() > 0) map.put("limit-player-daily", loot.getLimitPlayerDaily());
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -373,7 +529,9 @@ public class DraftManager {
 
         String modeStr = yaml.getString("cooldown.mode", "GLOBAL_COOLDOWN");
         VaultCooldownMode mode = VaultCooldownMode.fromString(modeStr);
-        int cooldownMinutes = yaml.getInt("cooldown.minutes", 30);
+        int cooldownSeconds = yaml.contains("cooldown.seconds")
+                ? yaml.getInt("cooldown.seconds")
+                : yaml.getInt("cooldown.minutes", 30) * 60;
         int rollCount = yaml.getInt("roll-count", 2);
 
         List<LootItem> items = new ArrayList<>();
@@ -385,15 +543,26 @@ public class DraftManager {
                     Object cObj = map.get("chance");
                     if (cObj instanceof Number n) chance = n.doubleValue();
                     boolean isAir = Boolean.TRUE.equals(map.get("is-air"));
+                    boolean broadcast = Boolean.TRUE.equals(map.get("broadcast"));
+                    String itemBroadcastMsg = (String) map.get("broadcast-message");
+                    int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                    int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                    int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
                     ItemStack item = null;
                     Object iObj = map.get("item");
                     if (iObj instanceof ItemStack is) item = is;
 
+                    LootItem lootItem;
                     if (isAir || item == null) {
-                        items.add(new LootItem(chance, true));
+                        lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                     } else {
-                        items.add(new LootItem(item, chance));
+                        lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                     }
+                    lootItem.setLimitServerDaily(limitServerDaily);
+                    lootItem.setLimitServerMonthly(limitServerMonthly);
+                    lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                    items.add(lootItem);
                 }
             }
         }
@@ -404,9 +573,49 @@ public class DraftManager {
         float victorySoundVolume = (float) yaml.getDouble("victory-sound.volume", 1.0);
         float victorySoundPitch = (float) yaml.getDouble("victory-sound.pitch", 1.2);
 
-        return new SpawnerTemplate(name, ominous, displayName, spawnedType, displayCycle, displayMobId,
-                mobPool, totalMobs, simultaneousMobs,
-                spawnDelaySeconds, playerRange, showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
-                mode, cooldownMinutes, rollCount, items);
+        String spawnModeStr = yaml.getString("spawn-mode", "SEQUENCE");
+        clre20.customLootX.model.SpawnerSpawnMode spawnMode = clre20.customLootX.model.SpawnerSpawnMode.fromString(spawnModeStr);
+
+        List<List<String>> waves = new ArrayList<>();
+        if (yaml.isList("waves")) {
+            List<?> rawWaves = yaml.getList("waves");
+            if (rawWaves != null) {
+                for (Object obj : rawWaves) {
+                    if (obj instanceof List<?> l) {
+                        List<String> w = new ArrayList<>();
+                        for (Object o : l) {
+                            if (o != null) w.add(String.valueOf(o));
+                        }
+                        waves.add(w);
+                    }
+                }
+            }
+        }
+        if (waves.isEmpty()) {
+            List<String> spawnSequence = yaml.getStringList("spawn-sequence");
+            int sim = Math.max(1, simultaneousMobs);
+            if (!spawnSequence.isEmpty()) {
+                List<String> cur = new ArrayList<>();
+                for (String s : spawnSequence) {
+                    cur.add(s);
+                    if (cur.size() >= sim) {
+                        waves.add(new ArrayList<>(cur));
+                        cur.clear();
+                    }
+                }
+                if (!cur.isEmpty()) waves.add(cur);
+            }
+        }
+
+        boolean waitWaveCleared = yaml.getBoolean("wave.wait-wave-cleared", true);
+        String broadcastMessage = yaml.getString("broadcast-message", null);
+
+        SpawnerTemplate st = new SpawnerTemplate(name, ominous, displayName, spawnedType, displayCycle, displayMobId,
+                mobPool, spawnMode, waves,
+                spawnDelaySeconds, playerRange, waitWaveCleared,
+                showActionBar, victorySoundEnabled, victorySound, victorySoundVolume, victorySoundPitch,
+                mode, Math.max(1, (int) Math.ceil((double) cooldownSeconds / 60.0)), rollCount, items, broadcastMessage);
+        st.setCooldownSeconds(cooldownSeconds);
+        return st;
     }
 }

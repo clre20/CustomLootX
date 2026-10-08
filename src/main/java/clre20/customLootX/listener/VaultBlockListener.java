@@ -291,8 +291,45 @@ public class VaultBlockListener implements Listener {
                     plugin.getVaultTemplateManager().recordUnlock(loc, player.getUniqueId(), template);
 
                     // E. 抽取並彈出戰利品
-                    List<ItemStack> rewards = template.rollAllItems();
+                    List<clre20.customLootX.model.LootItem> rolledLoots = template.rollAllLootItems(plugin, player.getUniqueId());
+                    if (rolledLoots.isEmpty()) {
+                        plugin.getConfigManager().log("vault-air",
+                                "%player%", player.getName(),
+                                "%name%", template.getName(),
+                                "%world%", loc.getWorld().getName(),
+                                "%x%", String.valueOf(loc.getBlockX()),
+                                "%y%", String.valueOf(loc.getBlockY()),
+                                "%z%", String.valueOf(loc.getBlockZ())
+                        );
+                        return;
+                    }
+
+                    List<ItemStack> rewards = new java.util.ArrayList<>();
+                    for (clre20.customLootX.model.LootItem loot : rolledLoots) {
+                        if (loot.isAir() || loot.getItem() == null || loot.getItem().getType().isAir()) {
+                            continue;
+                        }
+                        rewards.add(loot.getItem());
+                        if (loot.isBroadcast()) {
+                            plugin.getConfigManager().broadcastReward(
+                                    player,
+                                    "vault",
+                                    template.getDisplayName(),
+                                    loot,
+                                    template.getBroadcastMessage()
+                            );
+                        }
+                    }
+
                     if (rewards.isEmpty()) {
+                        plugin.getConfigManager().log("vault-air",
+                                "%player%", player.getName(),
+                                "%name%", template.getName(),
+                                "%world%", loc.getWorld().getName(),
+                                "%x%", String.valueOf(loc.getBlockX()),
+                                "%y%", String.valueOf(loc.getBlockY()),
+                                "%z%", String.valueOf(loc.getBlockZ())
+                        );
                         return;
                     }
 
@@ -320,7 +357,7 @@ public class VaultBlockListener implements Listener {
                         p.sendBlockChange(loc, ejectingVisualData);
                     }
 
-                    // 持續視覺守衛：在吐物期間從第 1 tick 開始每 2 ticks 維持狀態，確保多玩家及靠近者始終看到平滑開啟的百葉窗
+                    // 持續視覺守衛：在吐物期間每 6 ticks 維持狀態，大幅降低封包與運算負擔，同時確保多玩家看到平滑開啟的百葉窗
                     org.bukkit.scheduler.BukkitTask visualKeeper = new BukkitRunnable() {
                         @Override
                         public void run() {
@@ -334,11 +371,14 @@ public class VaultBlockListener implements Listener {
                                     block.setBlockData(vd, false);
                                 }
                             }
-                            for (Player p : loc.getWorld().getNearbyPlayers(loc, 64)) {
-                                p.sendBlockChange(loc, ejectingVisualData);
+                            java.util.Collection<Player> nearby = loc.getWorld().getNearbyPlayers(loc, 48);
+                            if (!nearby.isEmpty()) {
+                                for (Player p : nearby) {
+                                    p.sendBlockChange(loc, ejectingVisualData);
+                                }
                             }
                         }
-                    }.runTaskTimer(plugin, 1L, 2L);
+                    }.runTaskTimer(plugin, 1L, 6L);
 
                     for (int i = 0; i < totalItems; i++) {
                         ItemStack reward = rewards.get(i);
@@ -393,10 +433,16 @@ public class VaultBlockListener implements Listener {
                     }.runTaskLater(plugin, closeDelay);
 
                     // 原版試煉寶庫開獎無聊天室文字提示，僅透過百葉窗動畫、音效與物品噴發表現，此處僅於伺服器主控台記錄日誌
+                    String itemsDesc = clre20.customLootX.util.TextUtil.formatItemList(rewards);
+                    String itemNames = clre20.customLootX.util.TextUtil.formatItemNames(rewards);
                     plugin.getConfigManager().log("vault-unlock",
                             "%player%", player.getName(),
                             "%name%", template.getName(),
                             "%count%", String.valueOf(rewards.size()),
+                            "%items%", itemsDesc,
+                            "%item%", itemsDesc,
+                            "%item_names%", itemNames,
+                            "%item_name%", itemNames,
                             "%world%", loc.getWorld().getName(),
                             "%x%", String.valueOf(loc.getBlockX()),
                             "%y%", String.valueOf(loc.getBlockY()),
@@ -457,7 +503,7 @@ public class VaultBlockListener implements Listener {
             }
 
             boolean isExisting = session.getOriginalName() != null;
-            VaultWizardContext context = new VaultWizardContext(plugin, player, vt, held, isExisting, draftId, true);
+            VaultWizardContext context = new VaultWizardContext(plugin, player, vt, held, isExisting, session.getOriginalName(), draftId, true);
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().send(player, "draft-loaded");
             new VaultWizardStep1Gui(context).open();
@@ -498,19 +544,11 @@ public class VaultBlockListener implements Listener {
             );
         }
 
-        VaultWizardContext context = new VaultWizardContext(plugin, player, template, held, isExisting);
+        VaultWizardContext context = new VaultWizardContext(plugin, player, template, held, isExisting, isExisting ? templateName : null, null, false);
         new VaultWizardStep1Gui(context).open();
     }
 
     private String formatTime(long totalSeconds) {
-        if (totalSeconds < 60) {
-            return totalSeconds + " 秒";
-        }
-        long minutes = totalSeconds / 60;
-        long seconds = totalSeconds % 60;
-        if (seconds == 0) {
-            return minutes + " 分鐘";
-        }
-        return minutes + " 分 " + seconds + " 秒";
+        return clre20.customLootX.util.TextUtil.formatTimeSeconds(totalSeconds);
     }
 }

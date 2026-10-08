@@ -40,6 +40,8 @@ public class VaultTemplateManager {
     private final Map<String, Set<UUID>> rewardedPlayers = new ConcurrentHashMap<>();
     // 4. 已放置寶庫追蹤：locationKey -> templateName
     private final Map<String, String> placedVaults = new ConcurrentHashMap<>();
+    // 快取解析後的 Location，避免每秒心跳重複分割字串與配置 Location 物件
+    private final Map<String, Location> locationCache = new ConcurrentHashMap<>();
     // 5. 正在開獎噴發戰利品中的寶庫：locationKey
     private final Set<String> ejectingVaults = ConcurrentHashMap.newKeySet();
     private BukkitTask tickerTask;
@@ -98,7 +100,13 @@ public class VaultTemplateManager {
         } catch (Exception e) {
             mode = VaultCooldownMode.PLAYER_COOLDOWN;
         }
-        int cooldownMinutes = Math.max(1, yaml.getInt("cooldown.minutes", 10));
+        int cooldownSeconds;
+        if (yaml.contains("cooldown.seconds")) {
+            cooldownSeconds = Math.max(1, yaml.getInt("cooldown.seconds", 600));
+        } else {
+            cooldownSeconds = Math.max(1, yaml.getInt("cooldown.minutes", 10)) * 60;
+        }
+        String broadcastMessage = yaml.getString("broadcast-message", null);
 
         List<LootItem> items = new ArrayList<>();
         if (yaml.isList("items")) {
@@ -106,6 +114,9 @@ public class VaultTemplateManager {
             for (Map<?, ?> map : list) {
                 double chance = TextUtil.roundChance(map.containsKey("chance") ? ((Number) map.get("chance")).doubleValue() : 0.0);
                 boolean isAir = map.containsKey("is-air") && Boolean.parseBoolean(String.valueOf(map.get("is-air")));
+                boolean broadcast = map.containsKey("broadcast") && Boolean.parseBoolean(String.valueOf(map.get("broadcast")));
+                String itemBroadcastMsg = map.containsKey("broadcast-message") ? String.valueOf(map.get("broadcast-message")) : null;
+
                 ItemStack item = null;
                 if (!isAir && map.containsKey("item")) {
                     Object itemObj = map.get("item");
@@ -113,15 +124,24 @@ public class VaultTemplateManager {
                         item = is;
                     }
                 }
+                int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
+                int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
+                int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+
+                LootItem lootItem;
                 if (isAir || item == null) {
-                    items.add(new LootItem(chance, true));
+                    lootItem = new LootItem(chance, true, broadcast, itemBroadcastMsg);
                 } else {
-                    items.add(new LootItem(item, chance));
+                    lootItem = new LootItem(item, chance, broadcast, itemBroadcastMsg);
                 }
+                lootItem.setLimitServerDaily(limitServerDaily);
+                lootItem.setLimitServerMonthly(limitServerMonthly);
+                lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                items.add(lootItem);
             }
         }
 
-        return new VaultTemplate(name, ominous, displayName, keyItem, rollCount, mode, cooldownMinutes, items);
+        return new VaultTemplate(name, ominous, displayName, keyItem, rollCount, mode, cooldownSeconds, items, broadcastMessage);
     }
 
     public boolean saveTemplate(VaultTemplate template) {
@@ -138,12 +158,29 @@ public class VaultTemplateManager {
         yaml.set("key-item", template.getKeyItem());
         yaml.set("roll-count", template.getRollCount());
         yaml.set("cooldown.mode", template.getCooldownMode().name());
-        yaml.set("cooldown.minutes", template.getCooldownMinutes());
+        yaml.set("cooldown.seconds", template.getCooldownSeconds());
+        yaml.set("cooldown.minutes", Math.max(1, template.getCooldownSeconds() / 60));
+        if (template.getBroadcastMessage() != null && !template.getBroadcastMessage().trim().isEmpty()) {
+            yaml.set("broadcast-message", template.getBroadcastMessage());
+        }
 
         List<Map<String, Object>> list = new ArrayList<>();
         for (LootItem loot : template.getItems()) {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("chance", TextUtil.roundChance(loot.getChance()));
+            map.put("broadcast", loot.isBroadcast());
+            if (loot.getBroadcastMessage() != null && !loot.getBroadcastMessage().trim().isEmpty()) {
+                map.put("broadcast-message", loot.getBroadcastMessage());
+            }
+            if (loot.getLimitServerDaily() > 0) {
+                map.put("limit-server-daily", loot.getLimitServerDaily());
+            }
+            if (loot.getLimitServerMonthly() > 0) {
+                map.put("limit-server-monthly", loot.getLimitServerMonthly());
+            }
+            if (loot.getLimitPlayerDaily() > 0) {
+                map.put("limit-player-daily", loot.getLimitPlayerDaily());
+            }
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -250,7 +287,7 @@ public class VaultTemplateManager {
         if (loc == null || playerUuid == null || template == null) return;
         String key = toLocationKey(loc);
         long now = System.currentTimeMillis();
-        long expireTime = now + (long) template.getCooldownMinutes() * 60L * 1000L;
+        long expireTime = now + (long) template.getCooldownSeconds() * 1000L;
 
         switch (template.getCooldownMode()) {
             case ONCE_PER_PLAYER -> {
@@ -317,6 +354,7 @@ public class VaultTemplateManager {
     public void registerVault(Location loc, String templateName) {
         if (loc == null || templateName == null) return;
         String key = toLocationKey(loc);
+        locationCache.put(key, loc.clone());
         placedVaults.put(key, templateName);
         saveRuntimeData();
     }
@@ -324,12 +362,16 @@ public class VaultTemplateManager {
     public void unregisterVault(Location loc) {
         if (loc == null) return;
         String key = toLocationKey(loc);
+        locationCache.remove(key);
         placedVaults.remove(key);
         saveRuntimeData();
     }
 
     public Location parseLocation(String locKey) {
         if (locKey == null || locKey.isEmpty()) return null;
+        Location cached = locationCache.get(locKey);
+        if (cached != null) return cached;
+
         String[] parts = locKey.split(":");
         if (parts.length != 4) return null;
         World world = Bukkit.getWorld(parts[0]);
@@ -338,7 +380,9 @@ public class VaultTemplateManager {
             int x = Integer.parseInt(parts[1]);
             int y = Integer.parseInt(parts[2]);
             int z = Integer.parseInt(parts[3]);
-            return new Location(world, x, y, z);
+            Location loc = new Location(world, x, y, z);
+            locationCache.put(locKey, loc);
+            return loc;
         } catch (NumberFormatException e) {
             return null;
         }
@@ -575,6 +619,11 @@ public class VaultTemplateManager {
                 continue;
             }
 
+            // 視距守衛：48 格內無任何在線玩家時直接略過，避免無謂的 BlockData 與 TileState 操作
+            if (loc.getWorld().getNearbyPlayers(loc, 48).isEmpty()) {
+                continue;
+            }
+
             Block block = loc.getBlock();
             if (block.getType() != Material.VAULT) continue;
 
@@ -597,7 +646,8 @@ public class VaultTemplateManager {
                 }
             }
 
-            if (block.getState() instanceof Vault vs) {
+            // 使用 Paper block.getState(false) 避免產生沈重的 TileEntity 記憶體快照 (GC 優化)
+            if (block.getState(false) instanceof Vault vs) {
                 boolean stateChanged = false;
                 if (inGlobalCd) {
                     if (vs.getActivationRange() != 0.0) {
@@ -636,6 +686,10 @@ public class VaultTemplateManager {
     // ==========================================
 
     public void saveRuntimeData() {
+        saveRuntimeData(false);
+    }
+
+    public void saveRuntimeData(boolean sync) {
         YamlConfiguration yaml = new YamlConfiguration();
         long now = System.currentTimeMillis();
 
@@ -667,9 +721,18 @@ public class VaultTemplateManager {
             yaml.set("placed." + entry.getKey(), entry.getValue());
         }
 
-        try {
-            yaml.save(runtimeFile);
-        } catch (IOException ignored) {}
+        // 運行期間使用非同步執行緒寫入檔案，徹底避免伺服器主執行緒因硬碟 I/O 阻塞造成 TPS 波動
+        if (sync || !plugin.isEnabled()) {
+            try {
+                yaml.save(runtimeFile);
+            } catch (IOException ignored) {}
+        } else {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    yaml.save(runtimeFile);
+                } catch (IOException ignored) {}
+            });
+        }
     }
 
     public void loadRuntimeData() {

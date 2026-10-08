@@ -95,7 +95,7 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
         String modeDesc = template.getCooldownMode().getDisplay();
         String timeDesc = (template.getCooldownMode() == VaultCooldownMode.ONCE_PER_PLAYER)
                 ? "&7(終生一次)"
-                : ("&a" + template.getCooldownMinutes() + " &7分鐘");
+                : ("&a" + TextUtil.formatTimeSeconds(template.getCooldownSeconds()));
         String step3ModeName = context.getPlugin().getConfigManager().getText("gui.vault.step5.step3-mode-name", "&6【步驟三】冷卻機制: &e%mode%", "%mode%", modeDesc);
         List<String> step3ModeLore = context.getPlugin().getConfigManager().getStringList(
                 "gui.vault.step4.step2-mode-lore",
@@ -275,23 +275,34 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
             new VaultWizardStep4LootGui(context, 1).open();
             context.setTransitioning(false);
         } else if (slot == 31) {
-            // 放棄變更並清除草稿
+            // 放棄變更
             context.setDraftAbandoned(true);
+            if (context.isEditingExisting()) {
+                context.getPlugin().getConfigManager().send(player, "save-cancelled");
+                context.getPlugin().getConfigManager().playSound(player, "click");
+                player.closeInventory();
+                return;
+            }
             if (context.getDraftId() != null) {
                 context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.VAULT, context.getDraftId());
+            }
+            if (context.getOriginalName() != null) {
+                context.getPlugin().getDraftManager().deleteDraftByOriginalName(clre20.customLootX.model.DraftType.VAULT, context.getOriginalName());
             }
             ItemStack held = context.getItemInHand();
             if (held == null || held.getType().isAir()) {
                 held = player.getInventory().getItemInMainHand();
             }
-            context.getPlugin().getItemManager().removeDraft(held);
-            String origName = context.getOriginalName();
-            if (origName != null && context.getPlugin().getVaultTemplateManager().getTemplate(origName) != null) {
-                VaultTemplate origT = context.getPlugin().getVaultTemplateManager().getTemplate(origName);
-                context.getPlugin().getItemManager().updatePlayerHeldVaultItem(player, origT);
-            } else {
-                ItemStack blank = context.getPlugin().getItemManager().createBlankVaultItem(context.getTemplate().isOminous());
-                player.getInventory().setItemInMainHand(blank);
+            if (context.getPlugin().getItemManager().isCustomVaultItem(held)) {
+                context.getPlugin().getItemManager().removeDraft(held);
+                String origName = context.getOriginalName();
+                if (origName != null && context.getPlugin().getVaultTemplateManager().getTemplate(origName) != null) {
+                    VaultTemplate origT = context.getPlugin().getVaultTemplateManager().getTemplate(origName);
+                    context.getPlugin().getItemManager().updatePlayerHeldVaultItem(player, origT);
+                } else {
+                    ItemStack blank = context.getPlugin().getItemManager().createBlankVaultItem(context.getTemplate().isOminous());
+                    player.getInventory().setItemInMainHand(blank);
+                }
             }
             context.getPlugin().getConfigManager().send(player, "save-cancelled");
             context.getPlugin().getConfigManager().playSound(player, "click");
@@ -331,6 +342,10 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
                 // 刪除草稿檔案
                 if (context.getDraftId() != null) {
                     context.getPlugin().getDraftManager().deleteDraft(clre20.customLootX.model.DraftType.VAULT, context.getDraftId());
+                }
+                context.getPlugin().getDraftManager().deleteDraftByOriginalName(clre20.customLootX.model.DraftType.VAULT, template.getName());
+                if (origName != null) {
+                    context.getPlugin().getDraftManager().deleteDraftByOriginalName(clre20.customLootX.model.DraftType.VAULT, origName);
                 }
                 // 移除手持物品草稿標記並更新
                 ItemStack held = player.getInventory().getItemInMainHand();

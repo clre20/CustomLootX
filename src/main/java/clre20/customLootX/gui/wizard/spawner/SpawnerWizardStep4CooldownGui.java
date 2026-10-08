@@ -24,7 +24,10 @@ public class SpawnerWizardStep4CooldownGui extends CustomGuiHolder {
 
     public SpawnerWizardStep4CooldownGui(SpawnerWizardContext context) {
         this.context = context;
-        this.inventory = Bukkit.createInventory(this, 27, context.getPlugin().getConfigManager().getComponent("gui.spawner.step4.title", "&8[步驟 4/6] 冷卻模式與出貨數量"));
+        this.inventory = Bukkit.createInventory(this, 27, context.getPlugin().getConfigManager().getComponent(
+                "gui.spawner.step4.cooldown-title",
+                "&8[步驟 4-2/6] 冷卻模式與出貨數量"
+        ));
         render();
     }
 
@@ -72,14 +75,11 @@ public class SpawnerWizardStep4CooldownGui extends CustomGuiHolder {
         String timeBtnTitle = context.getPlugin().getConfigManager().getText("gui.vault.step2.time-button-name", "&e冷卻間隔時間");
         List<String> timeLore;
         if (hasCooldownTime) {
-            timeLore = context.getPlugin().getConfigManager().getStringList(
-                    "gui.vault.step2.time-button-lore",
-                    List.of(
-                            "&7目前設定: &a%minutes% &7分鐘",
-                            "&7",
-                            "&e點擊此處 &f開啟時間調整畫面"
-                    ),
-                    "%minutes%", template.getCooldownMinutes()
+            String formattedTime = TextUtil.formatTimeSeconds(template.getCooldownSeconds());
+            timeLore = List.of(
+                    "&7目前設定: &a" + formattedTime,
+                    "&7",
+                    "&e點擊此處 &f開啟秒數調整介面"
             );
             inventory.setItem(13, createButton(Material.CLOCK, timeBtnTitle, timeLore));
         } else {
@@ -110,12 +110,10 @@ public class SpawnerWizardStep4CooldownGui extends CustomGuiHolder {
         );
         inventory.setItem(15, createButton(Material.GOLD_INGOT, rollBtnTitle, rollLore));
 
-        // Slot 18: 上一步 (步驟三：波次與數量設定)
-        String backName = context.getPlugin().getConfigManager().getText("gui.spawner.step4.back-name", "&e⬅ 上一步 &f(波次與數量設定)");
-        List<String> backLore = context.getPlugin().getConfigManager().getStringList(
-                "gui.spawner.step4.back-lore",
-                List.of("&7返回 [步驟 3/6] 修改怪物總數或生成間隔")
-        );
+        // Slot 18: 上一步
+        boolean hasRandom = template.hasRandomInSequence();
+        String backName = hasRandom ? "&e⬅ 上一步 &f(隨機池機率)" : "&e⬅ 上一步 &f(怪物生成順序)";
+        List<String> backLore = List.of(hasRandom ? "&7返回 [步驟 4-1-2/6] 調整隨機池機率" : "&7返回 [步驟 4/6] 調整怪物生成順序");
         inventory.setItem(18, createButton(Material.ARROW, backName, backLore));
 
         // Slot 26: 下一步 (前往步驟五：獲勝獎勵掉落池)
@@ -176,10 +174,14 @@ public class SpawnerWizardStep4CooldownGui extends CustomGuiHolder {
             new SpawnerCountAdjustGui(context, SpawnerCountAdjustGui.TargetSetting.ROLL_COUNT).open();
             context.setTransitioning(false);
         } else if (slot == 18) {
-            // 上一步
+            // 上一步 (智慧返回：若有隨機格返回隨機池機率，否則返回順序看板)
             context.getPlugin().getConfigManager().playSound(player, "click");
             context.setTransitioning(true);
-            new SpawnerWizardStep3WavesGui(context).open();
+            if (context.getTemplate().hasRandomInSequence()) {
+                new SpawnerWizardStep4RandomChanceGui(context).open();
+            } else {
+                new SpawnerWizardStep4SequenceGui(context).open();
+            }
             context.setTransitioning(false);
         } else if (slot == 26) {
             // 下一步 (步驟五：獲勝獎勵掉落池)

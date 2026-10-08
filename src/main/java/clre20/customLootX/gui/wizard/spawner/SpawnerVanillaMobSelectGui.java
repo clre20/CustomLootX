@@ -303,13 +303,13 @@ public class SpawnerVanillaMobSelectGui extends CustomGuiHolder {
                 context.getPlugin().getConfigManager().playSound(player, "success");
                 player.sendMessage(TextUtil.parse("&a[CustomLootX] 已成功將 &e" + opt.name() + " &a加入生怪磚生成池！"));
                 context.setTransitioning(true);
-                new SpawnerWizardStep2MobGui(context, 1).open();
+                new SpawnerWizardStep3MobGui(context, 1).open();
                 context.setTransitioning(false);
             }
         } else if (slot == 45) {
             context.getPlugin().getConfigManager().playSound(player, "click");
             context.setTransitioning(true);
-            new SpawnerWizardStep2MobGui(context, 1).open();
+            new SpawnerWizardStep3MobGui(context, 1).open();
             context.setTransitioning(false);
         } else if (slot == 46) {
             if (category != MobCategory.ALL) {

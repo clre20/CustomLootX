@@ -21,6 +21,7 @@ public final class CustomLootX extends JavaPlugin {
     private clre20.customLootX.manager.VaultTemplateManager vaultTemplateManager;
     private clre20.customLootX.manager.SpawnerTemplateManager spawnerTemplateManager;
     private clre20.customLootX.manager.DraftManager draftManager;
+    private clre20.customLootX.manager.LootLimitManager lootLimitManager;
     private ItemManager itemManager;
     private ResetManager resetManager;
     private ChatInputManager chatInputManager;
@@ -37,6 +38,7 @@ public final class CustomLootX extends JavaPlugin {
 
         // Initialize managers
         this.configManager = new ConfigManager(this);
+        this.lootLimitManager = new clre20.customLootX.manager.LootLimitManager(this);
         this.itemManager = new ItemManager(this);
         this.draftManager = new clre20.customLootX.manager.DraftManager(this);
         this.templateManager = new TemplateManager(this);
@@ -93,11 +95,14 @@ public final class CustomLootX extends JavaPlugin {
         }
         if (vaultTemplateManager != null) {
             vaultTemplateManager.stopTicker();
-            vaultTemplateManager.saveRuntimeData();
+            vaultTemplateManager.saveRuntimeData(true);
         }
         if (spawnerTemplateManager != null) {
             spawnerTemplateManager.stopTicker();
-            spawnerTemplateManager.saveRuntimeData();
+            spawnerTemplateManager.saveRuntimeData(true);
+        }
+        if (lootLimitManager != null) {
+            lootLimitManager.save();
         }
         logConsole("&c✘ CustomLootX 插件已關閉");
     }
@@ -155,5 +160,9 @@ public final class CustomLootX extends JavaPlugin {
 
     public PlayerInteractListener getPlayerInteractListener() {
         return playerInteractListener;
+    }
+
+    public clre20.customLootX.manager.LootLimitManager getLootLimitManager() {
+        return lootLimitManager;
     }
 }

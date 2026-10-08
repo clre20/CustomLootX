@@ -40,6 +40,9 @@ public class SpawnerBattleSession {
 
     private int mobsSpawnedCount = 0;
     private int mobsKilledCount = 0;
+    private int currentWaveIndex = 0;
+    private boolean currentWaveSpawned = false;
+    private long lastWaveClearedTimeMs = 0L;
     private long lastSpawnTimeMs = 0L;
     private final long battleStartTimeMs;
     private long lastPlayerSeenTimeMs;
@@ -74,7 +77,7 @@ public class SpawnerBattleSession {
             tsState.setOminous(template.isOminous());
             for (UUID uuid : participatingPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline()) {
+                if (p != null && p.isOnline() && p.getWorld().equals(spawnerLocation.getWorld())) {
                     tsState.startTrackingPlayer(p);
                 }
             }
@@ -101,7 +104,7 @@ public class SpawnerBattleSession {
         }
 
         // 立即觸發首波怪物的生成
-        spawnWave();
+        spawnCurrentWave();
     }
 
     /**
@@ -135,9 +138,13 @@ public class SpawnerBattleSession {
         Block block = spawnerLocation.getBlock();
         if (block.getState() instanceof org.bukkit.block.TrialSpawner tsState) {
             boolean trackingChanged = false;
+            if (tsState.isOminous() != template.isOminous()) {
+                tsState.setOminous(template.isOminous());
+                trackingChanged = true;
+            }
             for (UUID uuid : participatingPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline()) {
+                if (p != null && p.isOnline() && p.getWorld().equals(world)) {
                     if (!tsState.isTrackingPlayer(p)) {
                         tsState.startTrackingPlayer(p);
                         trackingChanged = true;
@@ -185,30 +192,54 @@ public class SpawnerBattleSession {
             }
         }
 
-        // 3. 檢查是否已完成目標
-        if (mobsKilledCount >= template.getTotalMobs() || (mobsSpawnedCount >= template.getTotalMobs() && activeMobUuids.isEmpty())) {
-            finishVictory();
-            return;
-        }
+        List<List<String>> waves = template.getWaves();
+        long delayMs = template.getSpawnDelaySeconds() * 1000L;
 
-        // 4. 是否可以繼續生成下一波
-        if (mobsSpawnedCount < template.getTotalMobs() && activeMobUuids.size() < template.getSimultaneousMobs()) {
-            long delayMs = template.getSpawnDelaySeconds() * 1000L;
-            if (now - lastSpawnTimeMs >= delayMs) {
-                spawnWave();
+        if (template.isWaitWaveCleared()) {
+            // 模式 A (開啟): 必須等待場上怪物全數肅清，才倒數間隔進入下一波
+            if (currentWaveSpawned && activeMobUuids.isEmpty()) {
+                if (currentWaveIndex >= waves.size() - 1) {
+                    finishVictory();
+                    return;
+                }
+                currentWaveIndex++;
+                currentWaveSpawned = false;
+                lastWaveClearedTimeMs = now;
+            }
+
+            if (!currentWaveSpawned && currentWaveIndex < waves.size()) {
+                if (now - lastWaveClearedTimeMs >= delayMs) {
+                    spawnCurrentWave();
+                }
+            }
+        } else {
+            // 模式 B (關閉): 不等場上全滅，生成間隔秒數一到立即出下一輪
+            if (currentWaveIndex >= waves.size() - 1 && currentWaveSpawned && activeMobUuids.isEmpty()) {
+                finishVictory();
+                return;
+            }
+
+            if (currentWaveIndex < waves.size() - 1) {
+                if (now - lastSpawnTimeMs >= delayMs) {
+                    currentWaveIndex++;
+                    spawnCurrentWave();
+                }
             }
         }
 
-        // 5. 每秒向參戰玩家推播進度 Action Bar (依各生怪磚獨立設定)
+        // 6. 每秒向參戰玩家推播進度 Action Bar (依各生怪磚獨立設定)
         if (template.isShowActionBar()) {
             String format = plugin.getConfig().getString("settings.spawner.actionbar-format", "&e試煉戰鬥中: &a%killed%/%total% &7(場上: &f%active% &7隻)");
+            int displayWave = Math.min(waves.size(), currentWaveIndex + 1);
             String progressMsg = format
                     .replace("%killed%", String.valueOf(mobsKilledCount))
                     .replace("%total%", String.valueOf(template.getTotalMobs()))
-                    .replace("%active%", String.valueOf(activeMobUuids.size()));
+                    .replace("%active%", String.valueOf(activeMobUuids.size()))
+                    .replace("%wave%", String.valueOf(displayWave))
+                    .replace("%maxwave%", String.valueOf(waves.size()));
             for (UUID uuid : participatingPlayers) {
                 Player p = Bukkit.getPlayer(uuid);
-                if (p != null && p.isOnline() && p.getLocation().distanceSquared(spawnerLocation) <= maxDistanceSq) {
+                if (p != null && p.isOnline() && p.getWorld().equals(spawnerLocation.getWorld()) && p.getLocation().distanceSquared(spawnerLocation) <= maxDistanceSq) {
                     p.sendActionBar(TextUtil.parse(progressMsg));
                 }
             }
@@ -216,23 +247,29 @@ public class SpawnerBattleSession {
     }
 
     /**
-     * 生成一波怪 (直到達到同時上限或總怪數上限)
+     * 生成當前波次的所有怪物
      */
-    private void spawnWave() {
+    private void spawnCurrentWave() {
         World world = spawnerLocation.getWorld();
         if (world == null) return;
 
-        int canSpawn = Math.min(
-                template.getSimultaneousMobs() - activeMobUuids.size(),
-                template.getTotalMobs() - mobsSpawnedCount
-        );
+        List<List<String>> waves = template.getWaves();
+        if (waves.isEmpty() || currentWaveIndex >= waves.size()) {
+            return;
+        }
 
-        if (canSpawn <= 0) return;
+        List<String> waveMobs = waves.get(currentWaveIndex);
+        if (waveMobs == null || waveMobs.isEmpty()) {
+            currentWaveIndex++;
+            currentWaveSpawned = false;
+            return;
+        }
 
+        currentWaveSpawned = true;
         lastSpawnTimeMs = System.currentTimeMillis();
 
-        for (int i = 0; i < canSpawn; i++) {
-            clre20.customLootX.model.SpawnerMobEntry chosenEntry = template.rollSingleMob();
+        for (int i = 0; i < waveMobs.size(); i++) {
+            clre20.customLootX.model.SpawnerMobEntry chosenEntry = template.getMobEntryForWave(currentWaveIndex, i);
             Location spawnLoc = findSafeSpawnLocation(world, chosenEntry.getPreviewEntityType());
             if (spawnLoc == null) {
                 spawnLoc = spawnerLocation.clone().add(0.5, 1.0, 0.5);
@@ -418,19 +455,113 @@ public class SpawnerBattleSession {
                     }
                 }
                 if (visualData != null && world != null) {
-                    for (Player p : world.getNearbyPlayers(spawnerLocation, 64)) {
-                        p.sendBlockChange(spawnerLocation, visualData);
+                    java.util.Collection<Player> nearby = world.getNearbyPlayers(spawnerLocation, 48);
+                    if (!nearby.isEmpty()) {
+                        for (Player p : nearby) {
+                            p.sendBlockChange(spawnerLocation, visualData);
+                        }
                     }
                 }
             }
-        }.runTaskTimer(plugin, 1L, 2L);
+        }.runTaskTimer(plugin, 1L, 6L);
+
+        // 代表玩家（用於個人上限與通告）
+        Player repPlayer = null;
+        UUID repUuid = null;
+        if (!participatingPlayers.isEmpty()) {
+            for (UUID uuid : participatingPlayers) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null && p.isOnline()) {
+                    repPlayer = p;
+                    repUuid = uuid;
+                    break;
+                }
+            }
+            if (repUuid == null) {
+                repUuid = participatingPlayers.iterator().next();
+            }
+        }
 
         // 抽取獎勵物品
-        List<ItemStack> rewards = template.rollAllItems();
-        if (rewards.isEmpty()) {
+        List<clre20.customLootX.model.LootItem> rolledLoots = template.rollAllLootItems(plugin, repUuid);
+        String worldName = world != null ? world.getName() : "world";
+        String playerNames = "無玩家";
+        if (!participatingPlayers.isEmpty()) {
+            List<String> names = new java.util.ArrayList<>();
+            for (UUID uuid : participatingPlayers) {
+                Player p = Bukkit.getPlayer(uuid);
+                if (p != null) {
+                    names.add(p.getName());
+                } else {
+                    org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
+                    if (op.getName() != null) {
+                        names.add(op.getName());
+                    }
+                }
+            }
+            if (!names.isEmpty()) {
+                playerNames = String.join(", ", names);
+            }
+        }
+
+        if (rolledLoots.isEmpty()) {
+            plugin.getConfigManager().log("spawner-air",
+                    "%player%", playerNames,
+                    "%name%", template.getName(),
+                    "%world%", worldName,
+                    "%x%", String.valueOf(spawnerLocation.getBlockX()),
+                    "%y%", String.valueOf(spawnerLocation.getBlockY()),
+                    "%z%", String.valueOf(spawnerLocation.getBlockZ())
+            );
             Bukkit.getScheduler().runTaskLater(plugin, this::completeAndCooldown, 20L);
             return;
         }
+
+        List<ItemStack> rewards = new java.util.ArrayList<>();
+        for (clre20.customLootX.model.LootItem loot : rolledLoots) {
+            if (loot.isAir() || loot.getItem() == null || loot.getItem().getType().isAir()) {
+                continue;
+            }
+            rewards.add(loot.getItem());
+            if (loot.isBroadcast()) {
+                plugin.getConfigManager().broadcastReward(
+                        repPlayer,
+                        "spawner",
+                        template.getDisplayName(),
+                        loot,
+                        template.getBroadcastMessage()
+                );
+            }
+        }
+
+        if (rewards.isEmpty()) {
+            plugin.getConfigManager().log("spawner-air",
+                    "%player%", playerNames,
+                    "%name%", template.getName(),
+                    "%world%", worldName,
+                    "%x%", String.valueOf(spawnerLocation.getBlockX()),
+                    "%y%", String.valueOf(spawnerLocation.getBlockY()),
+                    "%z%", String.valueOf(spawnerLocation.getBlockZ())
+            );
+            Bukkit.getScheduler().runTaskLater(plugin, this::completeAndCooldown, 20L);
+            return;
+        }
+
+        String itemsDesc = clre20.customLootX.util.TextUtil.formatItemList(rewards);
+        String itemNames = clre20.customLootX.util.TextUtil.formatItemNames(rewards);
+        plugin.getConfigManager().log("spawner-loot",
+                "%player%", playerNames,
+                "%name%", template.getName(),
+                "%count%", String.valueOf(rewards.size()),
+                "%items%", itemsDesc,
+                "%item%", itemsDesc,
+                "%item_names%", itemNames,
+                "%item_name%", itemNames,
+                "%world%", worldName,
+                "%x%", String.valueOf(spawnerLocation.getBlockX()),
+                "%y%", String.valueOf(spawnerLocation.getBlockY()),
+                "%z%", String.valueOf(spawnerLocation.getBlockZ())
+        );
 
         // 依序連續彈射獎勵物品
         new BukkitRunnable() {
@@ -478,7 +609,7 @@ public class SpawnerBattleSession {
         }
 
         World world = spawnerLocation.getWorld();
-        long cooldownTicks = (long) template.getCooldownMinutes() * 60L * 20L;
+        long cooldownTicks = (long) template.getCooldownSeconds() * 20L;
         long cooldownEnd = (world != null ? world.getGameTime() : 0L) + cooldownTicks;
 
         Block block = spawnerLocation.getBlock();

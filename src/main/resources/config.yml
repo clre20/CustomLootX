@@ -64,11 +64,17 @@ messages:
   # 步驟精靈儲存失敗時
   save-failed: "&c儲存失敗，請檢查後台日誌！"
 
-  # 草稿自動暫存提示
+  # 草稿自動暫存提示 (手持方塊)
   draft-saved: "&a已為您暫存當前編輯進度至手持方塊中（草稿保留 %days% 天）。"
 
-  # 草稿還原提示
+  # 草稿自動暫存提示 (指令編輯)
+  draft-saved-cmd: "&a已為您暫存當前編輯進度（草稿保留 %days% 天），下次輸入 &e/clx edit &a指令即可繼續編輯！"
+
+  # 草稿還原提示 (手持方塊)
   draft-loaded: "&a已為您還原上次未儲存的草稿編輯進度！"
+
+  # 草稿還原提示 (指令編輯)
+  draft-loaded-cmd: "&a已為您載入 [%name%] 上次未儲存的暫存草稿！(若欲放棄草稿，可在最後確認介面點擊「放棄變更」)"
 
   # 草稿過期還原提示
   draft-expired-reverted: "&e此方塊的草稿已過期，已自動載入正式版本！"
@@ -134,7 +140,7 @@ messages:
   spawner-template-created: "&a已創建全新自訂試煉生怪磚！"
 
   # 生怪磚冷卻中
-  spawner-in-cooldown: "&c此試煉生怪磚冷卻中！剩餘 &e%time% 秒&c後可再次挑戰。"
+  spawner-in-cooldown: "&c此試煉生怪磚冷卻中！剩餘 &e%time% &c後可再次挑戰。"
 
   # 生怪磚終生一次已領取
   spawner-already-completed: "&c你已經完成過此試煉挑戰，無法再次領取獲勝獎勵！"
@@ -147,6 +153,9 @@ messages:
 
   # 生怪磚配置儲存成功
   spawner-save-success: "&a已成功儲存試煉生怪磚配置: &e%name%&a！"
+
+  # 生怪磚生成模式切換提示
+  spawner-mode-switched: "&8[&6CustomLootX&8] &a已切換生怪磚生成模式為: &e%mode%&a！"
 
   # 配置檔案儲存失敗
   template-save-failed: "&c儲存配置檔案失敗，請檢查主控台日誌！"
@@ -182,10 +191,10 @@ messages:
   input-cancelled: "&e已取消輸入操作。"
 
   # 聊天室輸入重置時間提示
-  time-prompt: "&e請在聊天室輸入自動重置時間（單位：分鐘，請輸入大於等於 1 的整數），輸入 &ccancel &e取消："
+  time-prompt: "&e請在聊天室輸入自動重置時間（單位：秒，請輸入大於等於 1 的整數），輸入 &ccancel &e取消："
 
-  # 重置時間小於 1 分鐘時的錯誤提示
-  time-min-invalid: "&c時間必須至少為 1 分鐘！"
+  # 重置時間小於 1 秒時的錯誤提示
+  time-min-invalid: "&c時間必須至少為 1 秒！"
 
   # 重置時間非整數時的錯誤提示
   time-invalid: "&c請輸入有效的整數數字！"
@@ -234,6 +243,8 @@ commands:
     list: "&e/%label% list &7- 列出所有已儲存的可疑方塊配置"
     delete: "&e/%label% delete <名稱> &7- 刪除指定的配置檔案"
     reload: "&e/%label% reload &7- 重新讀取設定與資料檔"
+    checklimit: "&e/%label% checklimit [玩家|all] &7- 查詢今日物品已出貨累計次數"
+    resetlimit: "&e/%label% resetlimit [玩家|all] &7- 重設出貨上限紀錄"
     footer: "&8=============================================="
 
   list:
@@ -244,7 +255,7 @@ commands:
     type-gravel: "&7礫"
     valid-chance: "&a[100.00%]"
     invalid-chance: "&c[%chance%]"
-    reset-on: "&b[重置: %minutes%m]"
+    reset-on: "&b[重置: %time%]"
     reset-off: "&8[無重置]"
     footer: "&8=================================================="
 
@@ -266,7 +277,7 @@ items:
   configured:
     type-sand: "可疑沙"
     type-gravel: "可疑礫石"
-    reset-enabled: "&a開啟 (&f%minutes% 分鐘&a)"
+    reset-enabled: "&a開啟 (&f%time%&a)"
     reset-disabled: "&c關閉"
     air-item-name: "&c[無掉落]"
     # %name%: 配置名稱, %type%: 材質, %reset%: 重置狀態, %count%: 掉落物總數
@@ -418,9 +429,9 @@ gui:
       - "&7"
       - "&e點擊切換 開啟 / 關閉"
     time-button-name: "&e重置間隔時間"
-    # %minutes%: 分鐘數
+    # %time%: 格式化時間, %minutes%: 分鐘數
     time-button-lore:
-      - "&7目前設定: &a%minutes% &5分鐘"
+      - "&7目前設定: &a%time%"
       - "&7"
       - "&e點擊此處 &f開啟時間調整畫面"
     next-button-name: "&a下一步 ➜ &f(掉落池設定)"
@@ -431,36 +442,39 @@ gui:
   # 步驟 2 重置時間增減畫面
   step2-time:
     title: "&8重置間隔時間設定"
-    # %minutes%: 分鐘數
-    clock-name: "&e目前重置時間: &a%minutes% &e分鐘"
+    # %time%: 格式化時間, %minutes%: 分鐘數
+    clock-name: "&e目前重置時間: &a%time%"
     clock-lore:
       - "&7方塊被刷完變為普通方塊後"
       - "&7經過此時間將自動復原並重抽戰利品"
       - "&7"
+      - "&7目前設定: &a%time%"
+      - "&7"
       - "&e請點擊兩側按鈕直接增減時間"
-      - "&7(最低設定為 1 分鐘)"
-    btn-minus-10-name: "&c-10 分鐘"
+      - "&7(最低設定為 1 秒)"
+    btn-minus-60-name: "&c-60s"
+    btn-minus-60-lore:
+      - "&7點擊減少 60 秒"
+    btn-minus-10-name: "&c-10s"
     btn-minus-10-lore:
-      - "&7點擊減少 10 分鐘"
-    btn-minus-5-name: "&c-5 分鐘"
-    btn-minus-5-lore:
-      - "&7點擊減少 5 分鐘"
-    btn-minus-1-name: "&c-1 分鐘"
+      - "&7點擊減少 10 秒"
+    btn-minus-1-name: "&c-1s"
     btn-minus-1-lore:
-      - "&7點擊減少 1 分鐘"
-    btn-plus-1-name: "&a+1 分鐘"
+      - "&7點擊減少 1 秒"
+    btn-plus-1-name: "&a+1s"
     btn-plus-1-lore:
-      - "&7點擊增加 1 分鐘"
-    btn-plus-5-name: "&a+5 分鐘"
-    btn-plus-5-lore:
-      - "&7點擊增加 5 分鐘"
-    btn-plus-10-name: "&a+10 分鐘"
+      - "&7點擊增加 1 秒"
+    btn-plus-10-name: "&a+10s"
     btn-plus-10-lore:
-      - "&7點擊增加 10 分鐘"
-    chat-input-name: "&b聊天室直接輸入"
+      - "&7點擊增加 10 秒"
+    btn-plus-60-name: "&a+60s"
+    btn-plus-60-lore:
+      - "&7點擊增加 60 秒"
+    chat-input-name: "&b聊天室直接輸入秒數"
     chat-input-lore:
-      - "&7點擊後在聊天室直接輸入數字"
-      - "&7例如輸入: &e15 &7(即為 15 分鐘)"
+      - "&7點擊後在聊天室直接輸入數字 (秒)"
+      - "&7完成後自動轉換為 &e分與秒"
+      - "&7例如輸入: &e90 &7(即為 1分30秒 (90秒))"
     back-button-name: "&e⬅ 返回 [步驟2/4] 重置模式"
     back-button-lore:
       - "&7儲存時間並返回重置模式設定"
@@ -578,11 +592,11 @@ gui:
       - "&7(獨立設定儲存於 YML)"
       - "&7"
       - "&e點擊可返回步驟二修改"
-    # %minutes%: 分鐘數
-    step2-time-name: "&6【步驟二】間隔時間: &a%minutes% &7分鐘"
+    # %time%: 格式化時間, %minutes%: 分鐘數
+    step2-time-name: "&6【步驟二】間隔時間: &a%time%"
     step2-time-lore:
       - "&7方塊被刷空後的自動重置冷卻時間"
-      - "&7目前設定: &a%minutes% &7分鐘"
+      - "&7目前設定: &a%time%"
       - "&7"
       - "&e點擊可返回步驟二修改"
     step3-empty-name: "&c【步驟三】尚未設定任何掉落物"
@@ -653,7 +667,7 @@ gui:
         - "&7▪ &c終生一次"
       time-button-name: "&e冷卻間隔時間"
       time-button-lore:
-        - "&7目前設定: &a%minutes% &7分鐘"
+        - "&7目前設定: &a%time%"
         - "&7"
         - "&e點擊此處 &f開啟時間調整畫面"
       time-disabled-lore:
@@ -699,6 +713,8 @@ gui:
       confirm-button-name: "&a✔ 完成並返回"
       confirm-button-lore:
         - "&7返回 [步驟 3/5]"
+    time-adjust:
+      title: "&8寶庫冷卻時間設定"
     key-setup:
       title: "&8[步驟 2/5] 專屬鑰匙製作與設定"
       info-name: "&e【防偽鑰匙製作流程】"
@@ -882,6 +898,8 @@ gui:
         - "&7此生怪磚設定: %status%"
         - "&7"
         - "&e點擊切換 開啟 / 關閉"
+    time-adjust:
+      title: "&8試煉生怪磚冷卻時間設定"
     step4:
       title: "&8[步驟 4/6] 冷卻模式與出貨數量"
       back-name: "&e⬅ 上一步 &f(波次與數量設定)"
@@ -910,6 +928,18 @@ gui:
 
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
+# 全服獲獎通告設定 (當玩家抽中標記為「通告」的稀有物品時向全服發送慶祝廣播)
+# 提示: 亦可於各配置 yml 檔案 (如 vaults/xxx.yml) 獨立設定 broadcast-message 覆蓋預設廣播！
+# 變數支援: %player% (玩家名), %name% (方塊配置名稱), %item% (抽中物品名稱與數量), %amount% (數量), %chance% (機率)
+# ------------------------------------------------------------------------------
+broadcast:
+  enabled: true
+  sound: "none" # 通告音效 (預設: none 關閉)
+  suspicious: "&6[可疑方塊·通告]&e 恭喜玩家 &f%player%&e 於 &8[&e%name%&8]&e 刷出了稀有戰利品: &r%item%&e！"
+  vault: "&6[試煉寶庫·通告]&e 恭喜玩家 &f%player%&e 成功解鎖寶庫 &8[&e%name%&8]&e，幸運獲得稀有戰利品: &r%item%&e！"
+  spawner: "&6[試煉生怪磚·通告]&e 恭喜玩家 &f%player%&e 征服試煉生怪磚 &8[&e%name%&8]&e，勇奪戰利品大獎: &r%item%&e！"
+
+# ------------------------------------------------------------------------------
 # 主控台後台日誌紀錄格式 (支援彩色代碼 & 與排版以區分不同插件內容)
 # ------------------------------------------------------------------------------
 logs:
@@ -918,7 +948,7 @@ logs:
   block-break: "&c[可疑方塊·破壞]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 挖碎了方塊 &8[&7配置: &e%name%&8] &7(方塊碎裂，無掉落)"
   brush-loot: "&e[可疑方塊·刷寶]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 成功刷出戰利品: &a%item% &8[&7配置: &e%name%&7, 機率: &a%chance%&7, 彈出面: &f%face%&8]"
   brush-air: "&8[可疑方塊·落空]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 刷出落空項目: &c%item% &8[&7配置: &e%name%&7, 機率: &c%chance%&8]"
-  reset-scheduled: "&b[可疑方塊·排程]&7 位於 &b(%world%, %x%, %y%, %z%)&7 的方塊 &8[&e%name%&8]&7 已刷空，已排程於 &f%minutes% 分鐘&7後自動重置"
+  reset-scheduled: "&b[可疑方塊·排程]&7 位於 &b(%world%, %x%, %y%, %z%)&7 的方塊 &8[&e%name%&8]&7 已刷空，已排程於 &f%time%&7 後自動重置"
   reset-executed: "&a[可疑方塊·重置]&7 位於 &b(%world%, %x%, %y%, %z%)&7 的方塊已成功重置 &8[&7配置: &e%name%&7, 材質: &f%type%&7, 新抽: &a%rolled%&8]"
   reset-cancelled: "&7[可疑方塊·取消]&7 位於 &b(%world%, %x%, %y%, %z%)&7 的方塊 &8[&e%name%&8]&7 重置排程已取消"
   reset-skipped: "&e[可疑方塊·略過]&7 位於 &b(%world%, %x%, %y%, %z%)&7 的方塊材質已變更為 &f%type%&7 (非沙或礫石)，略過重置 &8[&e%name%&8]"
@@ -927,12 +957,18 @@ logs:
   # ================= 試煉寶庫系列 (橘金/銅橙色) =================
   vault-placed: "&6[試煉寶庫·放置]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 放置了寶庫 &8[&7配置: &e%name%&7, 類型: &6%type%&8]"
   vault-broken: "&c[試煉寶庫·破壞]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 拆除了寶庫 &8[&7配置: &e%name%&8]"
-  vault-unlock: "&a[試煉寶庫·解鎖]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 成功解鎖寶庫 &8[&e%name%&8]&7，彈出了 &a%count% 件&7戰利品"
+  vault-unlock: "&a[試煉寶庫·解鎖]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 成功解鎖寶庫 &8[&e%name%&8]&7，彈出了 &a%count% 件&7戰利品: &e%items%"
+  vault-air: "&8[試煉寶庫·落空]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 解鎖寶庫 &8[&e%name%&8]&7，全部落空，未噴出任何戰利品"
   vault-save: "&e[試煉寶庫·儲存]&7 玩家 &f%player%&7 成功儲存寶庫配置 &8[&e%name%&8] &8(&7類型: &6%type%&7, 模式: &f%mode%&7, 出貨數: &a%rolls%&8)"
 
   # ================= 試煉生怪磚系列 (不祥紫羅蘭/粉紫色) =================
   spawner-placed: "&5[試煉生怪磚·放置]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 放置了生怪磚 &8[&7配置: &e%name%&7, 怪物: &c%mob%&7, 類型: &d%type%&8]"
   spawner-broken: "&c[試煉生怪磚·破壞]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 拆除了生怪磚 &8[&7配置: &e%name%&8]"
+  spawner-loot: "&5[試煉生怪磚·出貨]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 完成試煉挑戰 &8[&e%name%&8]&7，噴發了 &a%count% 件&7戰利品: &e%items%"
+  spawner-air: "&8[試煉生怪磚·落空]&7 玩家 &f%player%&7 於 &b(%world%, %x%, %y%, %z%)&7 完成試煉挑戰 &8[&e%name%&8]&7，獎勵池落空，未噴出任何戰利品"
+
+  # ================= 出貨上限攔截 (防火牆觸發警告) =================
+  limit-blocked: "&e[出貨上限·攔截]&7 玩家 &f%player%&7 於 &8[&e%name%&8]&7 抽中 &c%item%&7，因已達出貨上限而轉為落空！"
 
   # ================= 管理指令審計系列 (科技青藍色) =================
   cmd-create: "&b[管理指令·創建]&7 玩家 &f%player%&7 執行 &e/%label% create&7 創建了全新自訂可疑方塊草稿物品"

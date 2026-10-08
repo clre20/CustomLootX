@@ -19,7 +19,10 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityPotionEffectEvent;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -201,7 +204,7 @@ public class SpawnerBlockListener implements Listener {
                         plugin.getSpawnerTemplateManager().registerSpawner(loc, templateName);
                         long cd = plugin.getSpawnerTemplateManager().checkCooldownStatus(loc, player.getUniqueId(), template);
                         if (cd > 0) {
-                            plugin.getConfigManager().send(player, "spawner-in-cooldown", "%time%", String.valueOf(cd));
+                            plugin.getConfigManager().send(player, "spawner-in-cooldown", "%time%", TextUtil.formatTimeSeconds(cd));
                             plugin.getConfigManager().playSound(player, "error");
                         } else if (cd == -1) {
                             plugin.getConfigManager().send(player, "spawner-already-completed");
@@ -262,6 +265,43 @@ public class SpawnerBlockListener implements Listener {
         plugin.getSpawnerTemplateManager().onChunkLoad(event.getChunk());
     }
 
+    /**
+     * 玩家飲用不祥之瓶 (不祥藥水) 攔截：喝了不生效，清空預兆狀態
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerItemConsume(PlayerItemConsumeEvent event) {
+        if (event.getItem().getType() == Material.OMINOUS_BOTTLE) {
+            Player player = event.getPlayer();
+            player.removePotionEffect(PotionEffectType.BAD_OMEN);
+            player.removePotionEffect(PotionEffectType.TRIAL_OMEN);
+            player.removePotionEffect(PotionEffectType.RAID_OMEN);
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    player.removePotionEffect(PotionEffectType.BAD_OMEN);
+                    player.removePotionEffect(PotionEffectType.TRIAL_OMEN);
+                    player.removePotionEffect(PotionEffectType.RAID_OMEN);
+                }
+            }.runTaskLater(plugin, 1L);
+        }
+    }
+
+    /**
+     * 阻止獲得不祥之兆、試煉預兆或襲擊預兆（喝不祥之瓶、殺死掠奪隊長、生怪磚轉換等全部免疫）
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPotionEffectAdded(EntityPotionEffectEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        if (event.getAction() != EntityPotionEffectEvent.Action.ADDED) return;
+
+        PotionEffectType type = event.getModifiedType();
+        if (PotionEffectType.BAD_OMEN.equals(type)
+                || PotionEffectType.TRIAL_OMEN.equals(type)
+                || PotionEffectType.RAID_OMEN.equals(type)) {
+            event.setCancelled(true);
+        }
+    }
+
     private void openSpawnerWizard(Player player, ItemStack item) {
         // 檢查手持物品是否為草稿
         if (plugin.getItemManager().isDraftItem(item)) {
@@ -313,8 +353,9 @@ public class SpawnerBlockListener implements Listener {
                 return;
             }
 
-            boolean isExisting = session.getOriginalName() != null;
-            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, st, item, isExisting, draftId, true);
+            String origName = session.getOriginalName();
+            boolean isExisting = origName != null && !origName.trim().isEmpty();
+            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, st, item, isExisting, origName, draftId, true);
             plugin.getConfigManager().playSound(player, "click");
             plugin.getConfigManager().send(player, "draft-loaded");
             new SpawnerWizardStep1Gui(context).open();
@@ -364,7 +405,7 @@ public class SpawnerBlockListener implements Listener {
                         new java.util.ArrayList<>()
                 );
             }
-            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, template, item, true);
+            SpawnerWizardContext context = new SpawnerWizardContext(plugin, player, template, item, true, templateName, null, false);
             new SpawnerWizardStep1Gui(context).open();
         }
         plugin.getConfigManager().playSound(player, "click");
