@@ -47,12 +47,27 @@ public class LootLimitManager {
         startAutoSaveTask();
     }
 
+    private volatile String cachedTodayKey = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+    private volatile String cachedMonthKey = YearMonth.now().toString();
+    private volatile long lastDateRefreshMillis = System.currentTimeMillis();
+
+    private void updateDateCacheIfNeeded() {
+        long now = System.currentTimeMillis();
+        if (now - lastDateRefreshMillis > 60000L) {
+            cachedTodayKey = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            cachedMonthKey = YearMonth.now().toString();
+            lastDateRefreshMillis = now;
+        }
+    }
+
     private String getTodayKey() {
-        return LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        updateDateCacheIfNeeded();
+        return cachedTodayKey;
     }
 
     private String getCurrentMonthKey() {
-        return YearMonth.now().toString();
+        updateDateCacheIfNeeded();
+        return cachedMonthKey;
     }
 
     /**

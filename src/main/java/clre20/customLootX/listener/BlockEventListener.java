@@ -93,7 +93,7 @@ public class BlockEventListener implements Listener {
         // Apply custom loot properties to placed BrushableBlock on next tick
         Bukkit.getScheduler().runTask(plugin, () -> {
             Block block = loc.getBlock();
-            if (block.getState() instanceof BrushableBlock brushable) {
+            if (block.getState(false) instanceof BrushableBlock brushable) {
                 // Clear any vanilla archaeology loot table
                 brushable.clearLootTable();
                 brushable.setLootTable(null);
@@ -112,7 +112,7 @@ public class BlockEventListener implements Listener {
                     brushable.setItem(null);
                 }
 
-                brushable.update(true, true);
+                brushable.update(true, false);
 
                 String rolledDesc = clre20.customLootX.util.TextUtil.getItemDescription(rolled);
                 String typeDesc = template.getType() == Material.SUSPICIOUS_SAND
@@ -143,7 +143,7 @@ public class BlockEventListener implements Listener {
         plugin.getResetManager().cancelReset(loc);
         plugin.getPlayerInteractListener().removeLastBrushedFace(loc);
 
-        if (block.getState() instanceof BrushableBlock brushable) {
+        if (block.getState(false) instanceof BrushableBlock brushable) {
             PersistentDataContainer pdc = brushable.getPersistentDataContainer();
             if (pdc.has(plugin.getItemManager().KEY_CUSTOM_LOOT, PersistentDataType.BYTE)) {
                 String templateName = pdc.get(plugin.getItemManager().KEY_TEMPLATE_NAME, PersistentDataType.STRING);

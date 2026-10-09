@@ -45,6 +45,8 @@ public class VaultTemplateManager {
     // 5. 正在開獎噴發戰利品中的寶庫：locationKey
     private final Set<String> ejectingVaults = ConcurrentHashMap.newKeySet();
     private BukkitTask tickerTask;
+    private volatile boolean dirty = false;
+    private int autoSaveCounter = 0;
 
     public VaultTemplateManager(CustomLootX plugin) {
         this.plugin = plugin;
@@ -300,6 +302,7 @@ public class VaultTemplateManager {
                 playerCooldowns.computeIfAbsent(key, k -> new ConcurrentHashMap<>()).put(playerUuid, expireTime);
             }
         }
+        dirty = true;
         saveRuntimeData();
 
         // 立即同步至世界上原版 Vault TileState，避免冷卻中玩家靠近時觸發原版開啟樣式與音效
@@ -319,6 +322,7 @@ public class VaultTemplateManager {
         playerCooldowns.remove(key);
         globalCooldowns.remove(key);
         rewardedPlayers.remove(key);
+        dirty = true;
         saveRuntimeData();
 
         Block block = loc.getBlock();
@@ -356,6 +360,7 @@ public class VaultTemplateManager {
         String key = toLocationKey(loc);
         locationCache.put(key, loc.clone());
         placedVaults.put(key, templateName);
+        dirty = true;
         saveRuntimeData();
     }
 
@@ -364,6 +369,7 @@ public class VaultTemplateManager {
         String key = toLocationKey(loc);
         locationCache.remove(key);
         placedVaults.remove(key);
+        dirty = true;
         saveRuntimeData();
     }
 
@@ -561,11 +567,16 @@ public class VaultTemplateManager {
         }
 
         if (changed) {
-            saveRuntimeData();
+            dirty = true;
         }
 
-        // 3. 每秒狀態守衛巡檢：嚴格保證冷卻中寶庫維持關閉樣式 (INACTIVE) 與無感應聲音
-        tickVaultStateGuard();
+        // 定期非同步存檔檢查 (每 60 秒且資料異動時才非同步寫入磁碟)
+        autoSaveCounter++;
+        if (autoSaveCounter >= 60 && dirty) {
+            autoSaveCounter = 0;
+            dirty = false;
+            saveRuntimeData();
+        }
     }
 
     private void handleGlobalCooldownExpired(String locKey) {
@@ -604,83 +615,6 @@ public class VaultTemplateManager {
         }
     }
 
-    private void tickVaultStateGuard() {
-        long now = System.currentTimeMillis();
-        for (Map.Entry<String, String> entry : placedVaults.entrySet()) {
-            String locKey = entry.getKey();
-            if (ejectingVaults.contains(locKey)) {
-                continue;
-            }
-            VaultTemplate template = getTemplate(entry.getValue());
-            if (template == null) continue;
-
-            Location loc = parseLocation(locKey);
-            if (loc == null || loc.getWorld() == null || !loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
-                continue;
-            }
-
-            // 視距守衛：48 格內無任何在線玩家時直接略過，避免無謂的 BlockData 與 TileState 操作
-            if (loc.getWorld().getNearbyPlayers(loc, 48).isEmpty()) {
-                continue;
-            }
-
-            Block block = loc.getBlock();
-            if (block.getType() != Material.VAULT) continue;
-
-            Long globalExpire = globalCooldowns.get(locKey);
-            boolean inGlobalCd = (template.getCooldownMode() == VaultCooldownMode.GLOBAL_COOLDOWN && globalExpire != null && globalExpire > now);
-
-            if (block.getBlockData() instanceof org.bukkit.block.data.type.Vault data) {
-                boolean changed = false;
-                if (data.isOminous() != template.isOminous()) {
-                    data.setOminous(template.isOminous());
-                    changed = true;
-                }
-                // 全域冷卻時百葉窗與外觀絕對不可被激活，維持 INACTIVE 關閉樣式
-                if (inGlobalCd && data.getVaultState() == org.bukkit.block.data.type.Vault.State.ACTIVE) {
-                    data.setVaultState(org.bukkit.block.data.type.Vault.State.INACTIVE);
-                    changed = true;
-                }
-                if (changed) {
-                    block.setBlockData(data, true);
-                }
-            }
-
-            // 使用 Paper block.getState(false) 避免產生沈重的 TileEntity 記憶體快照 (GC 優化)
-            if (block.getState(false) instanceof Vault vs) {
-                boolean stateChanged = false;
-                if (inGlobalCd) {
-                    if (vs.getActivationRange() != 0.0) {
-                        vs.setActivationRange(0.0);
-                        stateChanged = true;
-                    }
-                } else {
-                    if (vs.getActivationRange() != 4.5) {
-                        vs.setActivationRange(4.5);
-                        stateChanged = true;
-                    }
-                }
-
-                // 個人冷卻模式：確保目前在冷卻中的所有玩家都在 TileState 已領取名單中
-                if (template.getCooldownMode() == VaultCooldownMode.PLAYER_COOLDOWN) {
-                    Map<UUID, Long> pMap = playerCooldowns.get(locKey);
-                    if (pMap != null) {
-                        for (Map.Entry<UUID, Long> pEntry : pMap.entrySet()) {
-                            if (pEntry.getValue() > now && !vs.hasRewardedPlayer(pEntry.getKey())) {
-                                vs.addRewardedPlayer(pEntry.getKey());
-                                stateChanged = true;
-                            }
-                        }
-                    }
-                }
-
-                if (stateChanged) {
-                    vs.update(true, false);
-                }
-            }
-        }
-    }
-
     // ==========================================
     // 運行期冷卻與位置資料持久化 (vault_runtime.yml)
     // ==========================================
@@ -690,48 +624,59 @@ public class VaultTemplateManager {
     }
 
     public void saveRuntimeData(boolean sync) {
-        YamlConfiguration yaml = new YamlConfiguration();
-        long now = System.currentTimeMillis();
-
-        // 1. 全域冷卻
-        for (Map.Entry<String, Long> entry : globalCooldowns.entrySet()) {
-            if (entry.getValue() > now) {
-                yaml.set("global." + entry.getKey(), entry.getValue());
-            }
-        }
-
-        // 2. 個人冷卻
+        // 主執行緒僅採集記憶體快照，耗時 < 0.1ms，徹底消除 YamlConfiguration 節點樹建構之 CPU 與 GC 尖峰
+        Map<String, Long> globalSnapshot = new HashMap<>(globalCooldowns);
+        Map<String, Map<UUID, Long>> playerSnapshot = new HashMap<>();
         for (Map.Entry<String, Map<UUID, Long>> entry : playerCooldowns.entrySet()) {
-            String locKey = entry.getKey();
-            for (Map.Entry<UUID, Long> pEntry : entry.getValue().entrySet()) {
-                if (pEntry.getValue() > now) {
-                    yaml.set("player." + locKey + "." + pEntry.getKey().toString(), pEntry.getValue());
-                }
-            }
+            playerSnapshot.put(entry.getKey(), new HashMap<>(entry.getValue()));
         }
-
-        // 3. 終生一次
+        Map<String, List<String>> rewardedSnapshot = new HashMap<>();
         for (Map.Entry<String, Set<UUID>> entry : rewardedPlayers.entrySet()) {
             List<String> uuids = entry.getValue().stream().map(UUID::toString).toList();
-            yaml.set("once." + entry.getKey(), uuids);
+            rewardedSnapshot.put(entry.getKey(), uuids);
         }
+        Map<String, String> placedSnapshot = new HashMap<>(placedVaults);
 
-        // 4. 已放置寶庫方塊位置
-        for (Map.Entry<String, String> entry : placedVaults.entrySet()) {
-            yaml.set("placed." + entry.getKey(), entry.getValue());
-        }
+        Runnable saveTask = () -> {
+            YamlConfiguration yaml = new YamlConfiguration();
+            long now = System.currentTimeMillis();
 
-        // 運行期間使用非同步執行緒寫入檔案，徹底避免伺服器主執行緒因硬碟 I/O 阻塞造成 TPS 波動
-        if (sync || !plugin.isEnabled()) {
+            // 1. 全域冷卻
+            for (Map.Entry<String, Long> entry : globalSnapshot.entrySet()) {
+                if (entry.getValue() > now) {
+                    yaml.set("global." + entry.getKey(), entry.getValue());
+                }
+            }
+
+            // 2. 個人冷卻
+            for (Map.Entry<String, Map<UUID, Long>> entry : playerSnapshot.entrySet()) {
+                String locKey = entry.getKey();
+                for (Map.Entry<UUID, Long> pEntry : entry.getValue().entrySet()) {
+                    if (pEntry.getValue() > now) {
+                        yaml.set("player." + locKey + "." + pEntry.getKey().toString(), pEntry.getValue());
+                    }
+                }
+            }
+
+            // 3. 終生一次
+            for (Map.Entry<String, List<String>> entry : rewardedSnapshot.entrySet()) {
+                yaml.set("once." + entry.getKey(), entry.getValue());
+            }
+
+            // 4. 已放置寶庫方塊位置
+            for (Map.Entry<String, String> entry : placedSnapshot.entrySet()) {
+                yaml.set("placed." + entry.getKey(), entry.getValue());
+            }
+
             try {
                 yaml.save(runtimeFile);
             } catch (IOException ignored) {}
+        };
+
+        if (sync || !plugin.isEnabled()) {
+            saveTask.run();
         } else {
-            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                try {
-                    yaml.save(runtimeFile);
-                } catch (IOException ignored) {}
-            });
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, saveTask);
         }
     }
 

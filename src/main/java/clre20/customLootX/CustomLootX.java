@@ -49,11 +49,13 @@ public final class CustomLootX extends JavaPlugin {
         this.guiManager = new GuiManager(this);
         this.playerInteractListener = new PlayerInteractListener(this);
 
-        // 啟動巡檢清理逾期草稿
-        int cleaned = this.draftManager.cleanExpiredDrafts();
-        if (cleaned > 0) {
-            logConsole("&7[草稿·清理]&7 啟動巡檢已自動清除 &c" + cleaned + " &7個逾期草稿檔案。");
-        }
+        // 非同步啟動巡檢清理逾期草稿，避免開服主執行緒檔案 I/O 卡頓
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            int cleaned = this.draftManager.cleanExpiredDrafts();
+            if (cleaned > 0) {
+                logConsole("&7[草稿·清理]&7 啟動巡檢已自動清除 &c" + cleaned + " &7個逾期草稿檔案。");
+            }
+        });
 
         // Register event listeners
         getServer().getPluginManager().registerEvents(guiManager, this);
@@ -77,7 +79,10 @@ public final class CustomLootX extends JavaPlugin {
             getCommand("clx").setTabCompleter(clxCmd);
         }
 
-        // Start Vault & Spawner cooldown & block state tickers
+        // Start Vault, Spawner & Archaeology Reset tickers
+        if (resetManager != null) {
+            resetManager.startTicker();
+        }
         if (vaultTemplateManager != null) {
             vaultTemplateManager.startTicker();
         }
@@ -91,7 +96,7 @@ public final class CustomLootX extends JavaPlugin {
     @Override
     public void onDisable() {
         if (resetManager != null) {
-            resetManager.cancelAll();
+            resetManager.stopTicker();
         }
         if (vaultTemplateManager != null) {
             vaultTemplateManager.stopTicker();

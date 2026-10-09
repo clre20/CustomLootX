@@ -166,7 +166,7 @@ public class TrialSpawnerNmsUtil {
         }
 
         try {
-            BlockState state = block.getState();
+            BlockState state = block.getState(false);
             TrialSpawner ts = null;
             if (state instanceof TrialSpawner) {
                 ts = (TrialSpawner) state;

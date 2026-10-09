@@ -21,6 +21,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.block.BlockFace;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,7 +29,21 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PlayerInteractListener implements Listener {
 
     private final CustomLootX plugin;
-    private final Set<String> activeBrushingBlocks = ConcurrentHashMap.newKeySet();
+
+    private static class BrushingEntry {
+        final Location location;
+        final String templateName;
+        final long startTimeMillis;
+
+        BrushingEntry(Location location, String templateName, long startTimeMillis) {
+            this.location = location;
+            this.templateName = templateName;
+            this.startTimeMillis = startTimeMillis;
+        }
+    }
+
+    private final Map<String, BrushingEntry> activeBrushingEntries = new ConcurrentHashMap<>();
+    private org.bukkit.scheduler.BukkitTask brushingTickerTask;
     private final Map<String, BlockFace> lastBrushedFace = new ConcurrentHashMap<>();
 
     public PlayerInteractListener(CustomLootX plugin) {
@@ -108,7 +123,7 @@ public class PlayerInteractListener implements Listener {
         if (action == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
             Block block = event.getClickedBlock();
             if (block.getType() == Material.SUSPICIOUS_SAND || block.getType() == Material.SUSPICIOUS_GRAVEL) {
-                if (block.getState() instanceof BrushableBlock brushable) {
+                if (block.getState(false) instanceof BrushableBlock brushable) {
                     PersistentDataContainer pdc = brushable.getPersistentDataContainer();
                     if (pdc.has(plugin.getItemManager().KEY_CUSTOM_LOOT, PersistentDataType.BYTE)) {
                         String templateName = pdc.get(plugin.getItemManager().KEY_TEMPLATE_NAME, PersistentDataType.STRING);
@@ -219,11 +234,11 @@ public class PlayerInteractListener implements Listener {
     }
 
     /**
-     * Tracks a custom suspicious block being brushed to trigger reset mode upon completion
+     * 追蹤玩家刷可疑方塊之進程，改用單一集中計時器統一巡檢，徹底消除獨立 Task 輪詢浪費
      */
     public void trackBrushing(Location loc, String templateName) {
         String key = toLocationKey(loc);
-        if (activeBrushingBlocks.contains(key)) {
+        if (activeBrushingEntries.containsKey(key)) {
             return;
         }
 
@@ -232,47 +247,63 @@ public class PlayerInteractListener implements Listener {
             return;
         }
 
-        activeBrushingBlocks.add(key);
+        activeBrushingEntries.put(key, new BrushingEntry(loc.clone(), templateName, System.currentTimeMillis()));
 
-        new BukkitRunnable() {
-            int elapsedTicks = 0;
-
-            @Override
-            public void run() {
-                elapsedTicks += 5;
-
-                if (loc.getWorld() == null || !loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
-                    cancel();
-                    activeBrushingBlocks.remove(key);
-                    return;
-                }
-
-                Block b = loc.getBlock();
-                Material type = b.getType();
-
-                // Check if turned into normal SAND or GRAVEL (Brushing complete!)
-                if (type == Material.SAND || type == Material.GRAVEL) {
-                    cancel();
-                    activeBrushingBlocks.remove(key);
-                    if (!plugin.getResetManager().hasPendingReset(loc)) {
-                        plugin.getResetManager().scheduleReset(loc, templateName, template.getResetSeconds());
+        if (brushingTickerTask == null || brushingTickerTask.isCancelled()) {
+            brushingTickerTask = new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (activeBrushingEntries.isEmpty()) {
+                        cancel();
+                        brushingTickerTask = null;
+                        return;
                     }
-                    return;
-                }
 
-                // If block is broken (AIR) or changed to something other than suspicious blocks
-                if (type != Material.SUSPICIOUS_SAND && type != Material.SUSPICIOUS_GRAVEL) {
-                    cancel();
-                    activeBrushingBlocks.remove(key);
-                    return;
-                }
+                    long now = System.currentTimeMillis();
+                    Iterator<Map.Entry<String, BrushingEntry>> it = activeBrushingEntries.entrySet().iterator();
+                    while (it.hasNext()) {
+                        Map.Entry<String, BrushingEntry> entry = it.next();
+                        BrushingEntry bEntry = entry.getValue();
+                        Location bLoc = bEntry.location;
 
-                // Timeout after 200 ticks (10 seconds)
-                if (elapsedTicks > 200) {
-                    cancel();
-                    activeBrushingBlocks.remove(key);
+                        // 逾時 10 秒自動清除
+                        if (now - bEntry.startTimeMillis > 10000L) {
+                            it.remove();
+                            continue;
+                        }
+
+                        if (bLoc.getWorld() == null || !bLoc.getWorld().isChunkLoaded(bLoc.getBlockX() >> 4, bLoc.getBlockZ() >> 4)) {
+                            it.remove();
+                            continue;
+                        }
+
+                        Block b = bLoc.getBlock();
+                        Material type = b.getType();
+
+                        // 刷洗完成：已變成普通沙子或礫石
+                        if (type == Material.SAND || type == Material.GRAVEL) {
+                            it.remove();
+                            if (!plugin.getResetManager().hasPendingReset(bLoc)) {
+                                LootTemplate t = plugin.getTemplateManager().getTemplate(bEntry.templateName);
+                                if (t != null && t.isResetEnabled()) {
+                                    plugin.getResetManager().scheduleReset(bLoc, bEntry.templateName, t.getResetSeconds());
+                                }
+                            }
+                            continue;
+                        }
+
+                        // 方塊被挖除 (空氣) 或已被替換為其他材質
+                        if (type != Material.SUSPICIOUS_SAND && type != Material.SUSPICIOUS_GRAVEL) {
+                            it.remove();
+                        }
+                    }
+
+                    if (activeBrushingEntries.isEmpty()) {
+                        cancel();
+                        brushingTickerTask = null;
+                    }
                 }
-            }
-        }.runTaskTimer(plugin, 5L, 5L);
+            }.runTaskTimer(plugin, 5L, 5L);
+        }
     }
 }

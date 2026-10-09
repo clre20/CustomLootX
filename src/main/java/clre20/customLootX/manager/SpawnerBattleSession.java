@@ -120,11 +120,12 @@ public class SpawnerBattleSession {
 
         long now = System.currentTimeMillis();
 
-        // 1. 檢測並更新附近玩家
-        double maxDistanceSq = Math.pow(template.getPlayerRange() * 1.5, 2);
+        // 1. 檢測並更新附近玩家 (局部空間索引檢索，杜絕 world.getPlayers() 全世界遍歷)
+        double maxDistance = template.getPlayerRange() * 1.5;
+        double maxDistanceSq = maxDistance * maxDistance;
         boolean hasNearbyPlayer = false;
 
-        for (Player p : world.getPlayers()) {
+        for (Player p : world.getNearbyPlayers(spawnerLocation, maxDistance)) {
             if (p.isDead() || !p.isValid()) continue;
             if (p.getGameMode() == org.bukkit.GameMode.SPECTATOR) continue;
 
@@ -136,7 +137,7 @@ public class SpawnerBattleSession {
 
         // 同步追蹤玩家至 TileState，防止原版 TrialSpawner 內部 detectedPlayers 為空而報錯強制關閉百葉窗
         Block block = spawnerLocation.getBlock();
-        if (block.getState() instanceof org.bukkit.block.TrialSpawner tsState) {
+        if (block.getState(false) instanceof org.bukkit.block.TrialSpawner tsState) {
             boolean trackingChanged = false;
             if (tsState.isOminous() != template.isOminous()) {
                 tsState.setOminous(template.isOminous());
@@ -182,11 +183,11 @@ public class SpawnerBattleSession {
             }
         }
 
-        // 2. 清理無效或已死亡但未觸發事件的實體 UUID
+        // 2. 清理無效或已死亡但未觸發事件的實體 UUID (改用區域 world.getEntity 消除跨界全伺服器搜尋)
         Iterator<UUID> it = activeMobUuids.iterator();
         while (it.hasNext()) {
             UUID id = it.next();
-            Entity e = Bukkit.getEntity(id);
+            Entity e = world.getEntity(id);
             if (e == null || !e.isValid() || e.isDead()) {
                 it.remove();
             }
@@ -613,7 +614,7 @@ public class SpawnerBattleSession {
         long cooldownEnd = (world != null ? world.getGameTime() : 0L) + cooldownTicks;
 
         Block block = spawnerLocation.getBlock();
-        if (block.getState() instanceof org.bukkit.block.TrialSpawner tsState) {
+        if (block.getState(false) instanceof org.bukkit.block.TrialSpawner tsState) {
             tsState.setOminous(template.isOminous());
             for (Player p : new ArrayList<>(tsState.getTrackedPlayers())) {
                 tsState.stopTrackingPlayer(p);

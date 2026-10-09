@@ -357,29 +357,6 @@ public class VaultBlockListener implements Listener {
                         p.sendBlockChange(loc, ejectingVisualData);
                     }
 
-                    // 持續視覺守衛：在吐物期間每 6 ticks 維持狀態，大幅降低封包與運算負擔，同時確保多玩家看到平滑開啟的百葉窗
-                    org.bukkit.scheduler.BukkitTask visualKeeper = new BukkitRunnable() {
-                        @Override
-                        public void run() {
-                            if (block.getType() != Material.VAULT) {
-                                cancel();
-                                return;
-                            }
-                            if (block.getBlockData() instanceof org.bukkit.block.data.type.Vault vd) {
-                                if (vd.getVaultState() != org.bukkit.block.data.type.Vault.State.EJECTING) {
-                                    vd.setVaultState(org.bukkit.block.data.type.Vault.State.EJECTING);
-                                    block.setBlockData(vd, false);
-                                }
-                            }
-                            java.util.Collection<Player> nearby = loc.getWorld().getNearbyPlayers(loc, 48);
-                            if (!nearby.isEmpty()) {
-                                for (Player p : nearby) {
-                                    p.sendBlockChange(loc, ejectingVisualData);
-                                }
-                            }
-                        }
-                    }.runTaskTimer(plugin, 1L, 6L);
-
                     for (int i = 0; i < totalItems; i++) {
                         ItemStack reward = rewards.get(i);
                         long delay = (long) i * intervalTicks;
@@ -412,7 +389,6 @@ public class VaultBlockListener implements Listener {
                     new BukkitRunnable() {
                         @Override
                         public void run() {
-                            visualKeeper.cancel();
                             plugin.getVaultTemplateManager().setEjecting(loc, false);
 
                             if (block.getType() == Material.VAULT) {
