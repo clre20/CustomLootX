@@ -118,10 +118,10 @@ public class LootTemplate {
     }
 
     /**
-     * Verify if total chance is exactly 100.00%
+     * Verify if total chance is exactly 100.00000%
      */
     public boolean isValidTotal() {
-        return Math.abs(getTotalChance() - 100.00) < 0.001;
+        return Math.abs(getTotalChance() - 100.0) < 0.00001;
     }
 
     /**
@@ -157,12 +157,13 @@ public class LootTemplate {
             return null;
         }
 
-        double roll = ThreadLocalRandom.current().nextDouble() * totalWeight;
+        // 隨機擲骰取 5 位小數 (對齊 1.00000 ~ 100.00000 精度)
+        double roll = TextUtil.rollRandomChance(totalWeight);
         double accumulated = 0.0;
 
         for (LootItem lootItem : available) {
             accumulated += lootItem.getChance();
-            if (roll < accumulated) {
+            if (roll <= accumulated) {
                 return lootItem;
             }
         }

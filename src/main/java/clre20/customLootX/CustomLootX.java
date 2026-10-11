@@ -22,6 +22,7 @@ public final class CustomLootX extends JavaPlugin {
     private clre20.customLootX.manager.SpawnerTemplateManager spawnerTemplateManager;
     private clre20.customLootX.manager.DraftManager draftManager;
     private clre20.customLootX.manager.LootLimitManager lootLimitManager;
+    private clre20.customLootX.manager.PlayerDataManager playerDataManager;
     private ItemManager itemManager;
     private ResetManager resetManager;
     private ChatInputManager chatInputManager;
@@ -38,6 +39,7 @@ public final class CustomLootX extends JavaPlugin {
 
         // Initialize managers
         this.configManager = new ConfigManager(this);
+        this.playerDataManager = new clre20.customLootX.manager.PlayerDataManager(this);
         this.lootLimitManager = new clre20.customLootX.manager.LootLimitManager(this);
         this.itemManager = new ItemManager(this);
         this.draftManager = new clre20.customLootX.manager.DraftManager(this);
@@ -106,6 +108,9 @@ public final class CustomLootX extends JavaPlugin {
             spawnerTemplateManager.stopTicker();
             spawnerTemplateManager.saveRuntimeData(true);
         }
+        if (playerDataManager != null) {
+            playerDataManager.saveAll(true);
+        }
         if (lootLimitManager != null) {
             lootLimitManager.save();
         }
@@ -169,5 +174,9 @@ public final class CustomLootX extends JavaPlugin {
 
     public clre20.customLootX.manager.LootLimitManager getLootLimitManager() {
         return lootLimitManager;
+    }
+
+    public clre20.customLootX.manager.PlayerDataManager getPlayerDataManager() {
+        return playerDataManager;
     }
 }

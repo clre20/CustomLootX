@@ -67,7 +67,7 @@ public class SpawnerWizardStep4RandomChanceGui extends CustomGuiHolder {
                 lore.add(TextUtil.parse("&8------------------------"));
                 lore.add(TextUtil.parse("&7內部代號: &f" + mob.getMobId()));
                 lore.add(TextUtil.parse("&7怪物類型: " + (mob.isMythic() ? "&dMythicMob 自訂怪物" : "&a原版生物")));
-                lore.add(TextUtil.parse("&e隨機抽取機率: &a" + String.format("%.2f%%", mob.getChance())));
+                lore.add(TextUtil.parse("&e隨機抽取機率: &a" + TextUtil.formatPercent(mob.getChance())));
                 lore.add(TextUtil.parse("&7"));
                 lore.add(TextUtil.parse("&e[點擊] &f設定此怪物的抽取權重"));
                 lore.add(TextUtil.parse("&8------------------------"));
@@ -116,11 +116,11 @@ public class SpawnerWizardStep4RandomChanceGui extends CustomGuiHolder {
             );
         } else {
             double diff = 100.0 - totalChance;
-            String diffStr = (diff > 0 ? ("&e尚缺: &a+" + String.format("%.2f%%", diff)) : ("&c超出: &4-" + String.format("%.2f%%", Math.abs(diff))));
+            String diffStr = (diff > 0 ? ("&e尚缺: &a+" + TextUtil.formatPercent(diff)) : ("&c超出: &4-" + TextUtil.formatPercent(Math.abs(diff))));
             totalLore = List.of(
                     "&7因順序中含有【隨機】格子",
                     "&7所有怪物的機率總和必須恰好為 100.00%:",
-                    "&f" + String.format("%.2f%%", totalChance),
+                    "&f" + TextUtil.formatPercent(totalChance),
                     diffStr,
                     "&e可使用【自動均分】或點擊單個怪物調整"
             );
@@ -143,7 +143,7 @@ public class SpawnerWizardStep4RandomChanceGui extends CustomGuiHolder {
                     "&c下一步 ➜ &7(機率非 100%)",
                     List.of(
                             "&c隨機池所有怪物機率總和必須恰好為 100.00%",
-                            "&7目前總和為 &f" + String.format("%.2f%%", totalChance),
+                            "&7目前總和為 &f" + TextUtil.formatPercent(totalChance),
                             "&e請先點擊【自動均分】或調整單隻怪物機率"
                     )
             ));
@@ -217,7 +217,7 @@ public class SpawnerWizardStep4RandomChanceGui extends CustomGuiHolder {
             case 53 -> {
                 // 下一步 (前往冷卻與出貨數量)
                 double totalChance = context.getTemplate().getTotalMobChance();
-                if (Math.abs(totalChance - 100.0) < 0.0001) {
+                if (Math.abs(totalChance - 100.0) < 0.00001) {
                     context.getPlugin().getConfigManager().playSound(player, "click");
                     context.setTransitioning(true);
                     new SpawnerWizardStep4CooldownGui(context).open();

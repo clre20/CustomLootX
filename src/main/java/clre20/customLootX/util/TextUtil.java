@@ -96,17 +96,36 @@ public final class TextUtil {
     }
 
     /**
-     * Format double percentage to exactly two decimal places (e.g. 15.50%)
+     * Format double percentage to exactly five decimal places (e.g. 45.72305%)
      */
     public static String formatPercent(double percent) {
-        return String.format(java.util.Locale.US, "%.2f%%", percent);
+        return String.format(java.util.Locale.US, "%.5f%%", percent);
     }
 
     /**
-     * Round double to 2 decimal places to prevent floating point precision issues
+     * Format double chance to exactly five decimal places without percent sign (e.g. 45.72305)
+     */
+    public static String formatChance(double chance) {
+        return String.format(java.util.Locale.US, "%.5f", chance);
+    }
+
+    /**
+     * Round double to 5 decimal places to prevent floating point precision issues
      */
     public static double roundChance(double val) {
-        return Math.round(val * 100.0) / 100.0;
+        return Math.round(val * 100000.0) / 100000.0;
+    }
+
+    /**
+     * 隨機抽取 0.00001 ~ maxWeight (對齊 1.00000 ~ 100.00000 的 5 位小數精度)，
+     * 取的數值精確至小數點後 5 位，例如: 45.72305
+     */
+    public static double rollRandomChance(double maxWeight) {
+        if (maxWeight <= 0.0) return 0.0;
+        long maxUnits = Math.round(maxWeight * 100000.0);
+        if (maxUnits <= 1L) return Math.round(maxWeight * 100000.0) / 100000.0;
+        long rolledUnits = java.util.concurrent.ThreadLocalRandom.current().nextLong(1L, maxUnits + 1);
+        return rolledUnits / 100000.0;
     }
 
     /**

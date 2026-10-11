@@ -90,6 +90,7 @@ public class TemplateManager {
                 int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
                 int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
                 int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+                int limitPlayerTotal = (map.get("limit-player-total") instanceof Number n) ? n.intValue() : 0;
 
                 LootItem lootItem;
                 if (isAir || item == null) {
@@ -100,6 +101,7 @@ public class TemplateManager {
                 lootItem.setLimitServerDaily(limitServerDaily);
                 lootItem.setLimitServerMonthly(limitServerMonthly);
                 lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                lootItem.setLimitPlayerTotal(limitPlayerTotal);
                 items.add(lootItem);
             }
         }
@@ -144,6 +146,9 @@ public class TemplateManager {
             }
             if (item.getLimitPlayerDaily() > 0) {
                 map.put("limit-player-daily", item.getLimitPlayerDaily());
+            }
+            if (item.getLimitPlayerTotal() > 0) {
+                map.put("limit-player-total", item.getLimitPlayerTotal());
             }
             if (!item.isAir() && item.getItem() != null) {
                 map.put("item", item.getItem());

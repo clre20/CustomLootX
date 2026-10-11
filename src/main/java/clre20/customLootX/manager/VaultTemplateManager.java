@@ -129,6 +129,7 @@ public class VaultTemplateManager {
                 int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
                 int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
                 int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+                int limitPlayerTotal = (map.get("limit-player-total") instanceof Number n) ? n.intValue() : 0;
 
                 LootItem lootItem;
                 if (isAir || item == null) {
@@ -139,6 +140,7 @@ public class VaultTemplateManager {
                 lootItem.setLimitServerDaily(limitServerDaily);
                 lootItem.setLimitServerMonthly(limitServerMonthly);
                 lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                lootItem.setLimitPlayerTotal(limitPlayerTotal);
                 items.add(lootItem);
             }
         }
@@ -182,6 +184,9 @@ public class VaultTemplateManager {
             }
             if (loot.getLimitPlayerDaily() > 0) {
                 map.put("limit-player-daily", loot.getLimitPlayerDaily());
+            }
+            if (loot.getLimitPlayerTotal() > 0) {
+                map.put("limit-player-total", loot.getLimitPlayerTotal());
             }
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
@@ -247,6 +252,11 @@ public class VaultTemplateManager {
         VaultCooldownMode mode = template.getCooldownMode();
         switch (mode) {
             case ONCE_PER_PLAYER -> {
+                if (playerUuid != null && plugin.getPlayerDataManager() != null) {
+                    if (plugin.getPlayerDataManager().getPlayerData(playerUuid).hasOpenedVault(key)) {
+                        return -1; // 終生已領過 (來自 playerdata/[uuid].yml)
+                    }
+                }
                 Set<UUID> set = rewardedPlayers.get(key);
                 if (set != null && set.contains(playerUuid)) {
                     return -1; // 終生已領過
@@ -261,6 +271,12 @@ public class VaultTemplateManager {
                 return 0;
             }
             case PLAYER_COOLDOWN -> {
+                if (playerUuid != null && plugin.getPlayerDataManager() != null) {
+                    long pExpire = plugin.getPlayerDataManager().getPlayerData(playerUuid).getVaultCooldown(key);
+                    if (pExpire > now) {
+                        return Math.max(1, (pExpire - now) / 1000);
+                    }
+                }
                 Map<UUID, Long> map = playerCooldowns.get(key);
                 if (map != null) {
                     Long expire = map.get(playerUuid);
@@ -294,12 +310,20 @@ public class VaultTemplateManager {
         switch (template.getCooldownMode()) {
             case ONCE_PER_PLAYER -> {
                 rewardedPlayers.computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet()).add(playerUuid);
+                if (plugin.getPlayerDataManager() != null) {
+                    plugin.getPlayerDataManager().getPlayerData(playerUuid).addOpenedVault(key);
+                    plugin.getPlayerDataManager().markDirty(playerUuid);
+                }
             }
             case GLOBAL_COOLDOWN -> {
                 globalCooldowns.put(key, expireTime);
             }
             case PLAYER_COOLDOWN -> {
                 playerCooldowns.computeIfAbsent(key, k -> new ConcurrentHashMap<>()).put(playerUuid, expireTime);
+                if (plugin.getPlayerDataManager() != null) {
+                    plugin.getPlayerDataManager().getPlayerData(playerUuid).setVaultCooldown(key, expireTime);
+                    plugin.getPlayerDataManager().markDirty(playerUuid);
+                }
             }
         }
         dirty = true;

@@ -19,10 +19,7 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
-import org.bukkit.event.entity.EntityPotionEffectEvent;
-import org.bukkit.potion.PotionEffectType;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -263,43 +260,6 @@ public class SpawnerBlockListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onChunkLoad(ChunkLoadEvent event) {
         plugin.getSpawnerTemplateManager().onChunkLoad(event.getChunk());
-    }
-
-    /**
-     * 玩家飲用不祥之瓶 (不祥藥水) 攔截：喝了不生效，清空預兆狀態
-     */
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onPlayerItemConsume(PlayerItemConsumeEvent event) {
-        if (event.getItem().getType() == Material.OMINOUS_BOTTLE) {
-            Player player = event.getPlayer();
-            player.removePotionEffect(PotionEffectType.BAD_OMEN);
-            player.removePotionEffect(PotionEffectType.TRIAL_OMEN);
-            player.removePotionEffect(PotionEffectType.RAID_OMEN);
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    player.removePotionEffect(PotionEffectType.BAD_OMEN);
-                    player.removePotionEffect(PotionEffectType.TRIAL_OMEN);
-                    player.removePotionEffect(PotionEffectType.RAID_OMEN);
-                }
-            }.runTaskLater(plugin, 1L);
-        }
-    }
-
-    /**
-     * 阻止獲得不祥之兆、試煉預兆或襲擊預兆（喝不祥之瓶、殺死掠奪隊長、生怪磚轉換等全部免疫）
-     */
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onPotionEffectAdded(EntityPotionEffectEvent event) {
-        if (!(event.getEntity() instanceof Player player)) return;
-        if (event.getAction() != EntityPotionEffectEvent.Action.ADDED) return;
-
-        PotionEffectType type = event.getModifiedType();
-        if (PotionEffectType.BAD_OMEN.equals(type)
-                || PotionEffectType.TRIAL_OMEN.equals(type)
-                || PotionEffectType.RAID_OMEN.equals(type)) {
-            event.setCancelled(true);
-        }
     }
 
     private void openSpawnerWizard(Player player, ItemStack item) {

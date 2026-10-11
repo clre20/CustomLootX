@@ -78,7 +78,7 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
                                 "&7",
                                 "&e[點擊] &f設定機率或移除此物品"
                         ),
-                        "%chance%", String.format("%.2f%%", loot.getChance())
+                        "%chance%", TextUtil.formatPercent(loot.getChance())
                 );
                 for (String line : chanceLore) {
                     currentLore.add(TextUtil.parse(line));
@@ -91,6 +91,7 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
                     if (loot.getLimitServerDaily() > 0) limitParts.add("全服日:" + loot.getLimitServerDaily());
                     if (loot.getLimitServerMonthly() > 0) limitParts.add("全服月:" + loot.getLimitServerMonthly());
                     if (loot.getLimitPlayerDaily() > 0) limitParts.add("個人日:" + loot.getLimitPlayerDaily());
+                    if (loot.getLimitPlayerTotal() > 0) limitParts.add("個人總:" + loot.getLimitPlayerTotal());
                     currentLore.add(TextUtil.parse("&c🛡️ 出貨上限: &e" + String.join(" &8| &e", limitParts)));
                 }
                 meta.lore(currentLore);
@@ -153,7 +154,7 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
         boolean isValid = template.isTotalChanceValid();
         String totalTitle = isValid
                 ? context.getPlugin().getConfigManager().getText("gui.step3.total-valid-name", "&a✔ 總機率: 100.00%")
-                : context.getPlugin().getConfigManager().getText("gui.step3.total-invalid-name", "&c✖ 總機率: %total%", "%total%", String.format("%.2f%%", totalChance));
+                : context.getPlugin().getConfigManager().getText("gui.step3.total-invalid-name", "&c✖ 總機率: %total%", "%total%", TextUtil.formatPercent(totalChance));
         List<String> totalLore;
         if (isValid) {
             totalLore = context.getPlugin().getConfigManager().getStringList(
@@ -165,7 +166,7 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
             );
         } else {
             double diff = 100.0 - totalChance;
-            String diffStr = (diff > 0 ? ("&e尚缺: &a+" + String.format("%.2f%%", diff)) : ("&c超出: &4-" + String.format("%.2f%%", Math.abs(diff))));
+            String diffStr = (diff > 0 ? ("&e尚缺: &a+" + TextUtil.formatPercent(diff)) : ("&c超出: &4-" + TextUtil.formatPercent(Math.abs(diff))));
             totalLore = context.getPlugin().getConfigManager().getStringList(
                     "gui.step3.total-invalid-lore",
                     List.of(
@@ -174,7 +175,7 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
                             "%diff%",
                             "&c必須正好等於 100.00% 才能送出儲存！"
                     ),
-                    "%total%", String.format("%.2f%%", totalChance),
+                    "%total%", TextUtil.formatPercent(totalChance),
                     "%diff%", diffStr
             );
         }
@@ -275,7 +276,7 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
                 int itemIndex = page * ITEMS_PER_PAGE + rawSlot;
                 if (itemIndex < items.size()) {
                     LootItem old = items.get(itemIndex);
-                    items.set(itemIndex, new LootItem(toAdd, old.getChance(), old.isBroadcast(), old.getBroadcastMessage(), old.getLimitServerDaily(), old.getLimitServerMonthly(), old.getLimitPlayerDaily()));
+                    items.set(itemIndex, new LootItem(toAdd, old.getChance(), old.isBroadcast(), old.getBroadcastMessage(), old.getLimitServerDaily(), old.getLimitServerMonthly(), old.getLimitPlayerDaily(), old.getLimitPlayerTotal()));
                 } else {
                     items.add(new LootItem(toAdd, initChance));
                 }
@@ -394,7 +395,7 @@ public class SpawnerWizardStep5LootGui extends CustomGuiHolder {
         int count = items.size();
         if (count == 0) return;
 
-        double base = Math.floor((100.0 / count) * 100.0) / 100.0;
+        double base = Math.floor((100.0 / count) * 100000.0) / 100000.0;
         double totalAssigned = base * count;
         double remainder = TextUtil.roundChance(100.0 - totalAssigned);
 

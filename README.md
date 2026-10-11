@@ -1,6 +1,6 @@
 # CustomLootX
 
-![Release](https://img.shields.io/badge/Release-v2.4.9-orange.svg)
+![Release](https://img.shields.io/badge/Release-v3.6.2-orange.svg)
 ![Version](https://img.shields.io/badge/Minecraft-1.21.x%20%7C%2026.x-brightgreen.svg)
 ![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
 
@@ -13,14 +13,14 @@
 ### 1. 自訂可疑方塊
 * **方塊種類支援**：支援 1.20+ 特色的 **可疑沙子** 與 **可疑礫石**。
 * **動態刷寶重置**：支援獨立設定每個可疑方塊的自動重置時間，刷出戰利品後自動在倒數完畢時重置，讓玩家可重複探索。
-* **視覺化獎池機率**：54 格箱子介面直觀擺放獎勵，支援點擊加減與聊天室精準小數點輸入（精度達 `0.01%`），可自訂「無掉落」機率，並有一鍵自動補齊與平均分配功能。
+* **視覺化獎池機率**：54 格箱子介面直觀擺放獎勵，支援點擊加減與聊天室精準小數點輸入（**精度高達 `0.00001%`**，採 5 位小數高精度隨機演算法），可自訂「無掉落」機率，並有一鍵自動補齊與平均分配功能。
 
 ### 2. 自訂試煉寶庫
 * **自訂解鎖鑰匙**：支援任意物品作為開啟鑰匙，支援比對物品材質、自訂顯示名稱、完整 Lore 行與 CustomModelData / NBT，亦可透過專屬指令隨時發放防偽鑰匙。
 * **三大多元冷卻模式**：
   * **個人獨立冷卻**：每位玩家各自獨立計算解鎖冷卻時間，適合多人副本各自領獎。
   * **全域伺服器冷卻**：一人解鎖後全服進入冷卻，適合野外首領寶箱爭奪。
-  * **終生一次模式**：每位玩家僅限成功開啟領取一次，適合一次性通關獎勵。
+  * **終生一次模式**：每位玩家僅限成功開啟領取一次，適合一次性通關獎勵（記錄儲存於獨立玩家資料檔）。
 * **動態展示與彈出戰利品**：
   * 支援設定多個戰利品抽取次數（1 ~ 64 件）。
   * 支援試煉寶庫經典的內部旋轉物品預覽展示與解鎖時的物品彈出特效。
@@ -39,10 +39,10 @@
 * **跨世界防護**：戰鬥進程具備世界安全檢驗，防止玩家戰鬥期間跨界傳送造成例外報錯。
 
 ### 4. 戰利品額度限制與全服通告
-* **全服與個人數量限制**：稀有掉落物支援設定「全服上限」與「每人每日/累計上限」。
+* **全服與個人數量限制**：稀有掉落物支援設定「全服每日/每月上限」與「個人單日/終生累計上限」（獨立玩家檔案儲存於 `/playerdata/[uuid].yml`，支援非同步 I/O 寫入與定時釋放快取記憶體）。
 * **智慧剔除機制**：當玩家抽中已達獲取上限的物品時，系統將**自動將該物品剔除於抽取選項**並正常進行抽獎，保障玩家獲獎權益，絕不吞抽！
 * **真實自訂名稱廣播**：支援全服出貨公告，通告內容採用物品的真實顯示名稱（而非原生 Material ID），音效與文字皆可自由配置。
-* **額度查詢與重置管理**：管理員可透過指令隨時查詢全服或指定玩家的出貨紀錄與剩餘額度，亦可一鍵進行額度重置。
+* **額度查詢與重置管理**：管理員可透過指令隨時查詢全服或指定玩家的出貨紀錄與剩餘額度，亦可彈性針對「每日上限」、「終生上限」或特定單項物品進行額度重置。
 
 ### 5. 視覺化引導精靈與草稿保護
 * **零門檻視覺化操作**：手持樣板物品對空氣右鍵即可進入專屬設定精靈，儲存前完整列出所有參數進行總覽確認。
@@ -62,14 +62,14 @@
 | 指令 | 說明 |
 | :--- | :--- |
 | `/clx create <suspicious\|vault\|spawner> [ominous\|normal]` | 創建全新自訂樣板物品（手持對空氣右鍵進入精靈引導） |
-| `/clx give <suspicious\|vault\|spawner> <名稱> [玩家] [數量]` | 取得或給予指定玩家已設定好的樣板方塊 |
+| `/clx give <suspicious\|vault\|spawner> <名稱> [玩家] [數量]` | 取得或給予指定玩家已設定好的樣板方塊（控制台必填玩家） |
 | `/clx key <寶庫名稱> [玩家] [數量]` | 發放指定寶庫的專屬防偽解鎖鑰匙 |
 | `/clx edit <suspicious\|vault\|spawner> <名稱>` | 直接開啟現有模板進行步驟修改（純淨無草稿模式） |
 | `/clx list [suspicious\|vault\|spawner]` | 列出所有或指定分類下已儲存的配置及其冷卻/重置狀態 |
 | `/clx delete <suspicious\|vault\|spawner> <名稱>` | 刪除指定的配置檔案並同步清除草稿 |
-| `/clx checklimit [玩家\|all]` | 查詢指定玩家或全體玩家的物品出貨額度與累計紀錄 |
-| `/clx resetlimit [玩家\|all]` | 重設指定玩家或全體玩家的戰利品出貨額度累計 |
-| `/clx reload` | 重新載入所有設定檔、模板資料與執行中計時器 |
+| `/clx checklimit [玩家\|all]` | 查詢今日出貨累計次數與個人累積總出貨（終生上限），可查自己、指定玩家或全體玩家 |
+| `/clx resetlimit <玩家\|all> [daily\|total\|all] [物品關鍵字]` | 重設指定玩家或全服玩家的戰利品出貨額度上限（支援 `daily` 每日 / `total` 終生 / `all` 全部，可選填物品關鍵字過濾） |
+| `/clx reload` | 重新載入所有設定檔、模板資料、玩家數據與執行中計時器 |
 | `/clx help` | 顯示完整的指令清單與用法說明 |
 
 ---
@@ -85,7 +85,7 @@
 
 # CustomLootX (English)
 
-![Release](https://img.shields.io/badge/Release-v2.4.9-orange.svg)
+![Release](https://img.shields.io/badge/Release-v3.6.2-orange.svg)
 ![Version](https://img.shields.io/badge/Minecraft-1.21.x%20%7C%2026.x-brightgreen.svg)
 ![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
 
@@ -100,14 +100,14 @@ It seamlessly integrates the core mechanics of 1.21: **Custom Suspicious Blocks*
 ### 1. Custom Suspicious Blocks
 - **Block Type Support**: Fully supports 1.20+ features, including **Suspicious Sand** and **Suspicious Gravel**.
 - **Dynamic Brushing & Auto-Reset**: Configure independent respawn/reset timers for each block. Once brushed and claimed, blocks automatically reset after countdown, allowing players to explore them repeatedly.
-- **Visual Loot Table & Drop Rates**: Drag and drop rewards directly into an intuitive 54-slot chest GUI. Supports click adjustments and precise decimal chat input (down to `0.01%`), custom "Empty Drop" chances, and one-click auto-fill or balance features.
+- **Visual Loot Table & Drop Rates**: Drag and drop rewards directly into an intuitive 54-slot chest GUI. Supports click adjustments and precise decimal chat input (**down to `0.00001%`**, 5 decimal places with high-precision RNG), custom "Empty Drop" chances, and one-click auto-fill or balance features.
 
 ### 2. Custom Trial Vaults
 - **Customizable Keys**: Use any item as an unlocking key (including vanilla Trial Keys, Ominous Trial Keys, or custom RPG keys). Supports matching item material, custom display names, full lore lines, and CustomModelData / NBT tags.
 - **Three Versatile Cooldown Modes**:
   * **Individual Player Cooldown**: Tracks unlock cooldowns per player—ideal for multiplayer dungeons where everyone claims their own loot.
   * **Global Server Cooldown**: Triggers a server-wide cooldown once unlocked—ideal for open-world boss chests and competitive objectives.
-  * **Once Per Player Mode**: Allows each player to claim rewards only once in a lifetime—perfect for unique dungeon completion treasures.
+  * **Once Per Player Mode**: Allows each player to claim rewards only once in a lifetime (persisted in dedicated player data profiles).
 - **Dynamic Previews & Ejection Effects**:
   * Supports configuring multiple loot roll counts per unlock (1 ~ 64 items).
   * Preserves the classic Trial Vault visual effects: spinning item previews inside the vault and item ejection animations upon unlocking.
@@ -126,10 +126,10 @@ It seamlessly integrates the core mechanics of 1.21: **Custom Suspicious Blocks*
 - **Cross-World Safety**: Robust world validation prevents distance calculation errors when players teleport across worlds during battles.
 
 ### 4. Loot Limits & Server-Wide Broadcasts
-- **Global & Per-Player Quotas**: Configure server-wide caps and per-player quotas for rare items.
+- **Global & Per-Player Quotas**: Configure server-wide daily/monthly caps and per-player daily/lifetime quotas for rare items (stored in dedicated `/playerdata/[uuid].yml` files with asynchronous I/O and automatic cache reclamation).
 - **Smart Pool Exclusion**: When a player rolls an item that has reached its quota, the item is **automatically excluded from the pool**, allowing the roll to proceed seamlessly without blocking normal reward distribution!
 - **Real Item Display Names in Broadcasts**: Server-wide reward announcements use the item's custom display name (rather than raw Material IDs), with customizable sound effects and toggles.
-- **Limit Auditing & Reset Commands**: Administrators can inspect claim counters and remaining limits via `/clx checklimit` and reset quotas via `/clx resetlimit`.
+- **Limit Auditing & Reset Commands**: Administrators can inspect claim counters and remaining limits via `/clx checklimit` and flexibly reset daily or lifetime quotas via `/clx resetlimit`.
 
 ### 5. Setup Wizard & Draft Protection
 - **Visual Wizard**: Right-click the air while holding a template item to access the step-by-step setup wizard with a final confirmation overview.
@@ -154,9 +154,9 @@ The primary command prefix is `/clx` (alias: `/customlootx`). All administrative
 | `/clx edit <suspicious\|vault\|spawner> <name>` | Open the setup wizard for an existing template (Clean No-Draft Mode) |
 | `/clx list [suspicious\|vault\|spawner]` | List all saved configurations and their cooldown/reset status |
 | `/clx delete <suspicious\|vault\|spawner> <name>` | Delete a specified configuration profile and clean up related drafts |
-| `/clx checklimit [player\|all]` | Inspect claimed quotas and remaining limits for players or globally |
-| `/clx resetlimit [player\|all]` | Reset loot claim quotas for a specific player or all players |
-| `/clx reload` | Reload all configuration files, template data, and active runtimers |
+| `/clx checklimit [player\|all]` | Inspect claimed daily and lifetime quotas for yourself, a specific player, or all players |
+| `/clx resetlimit <player\|all> [daily\|total\|all] [item_keyword]` | Reset loot claim quotas for a specific player or all players (supports `daily`, `total` lifetime, or `all`, with optional item keyword filter) |
+| `/clx reload` | Reload all configuration files, template data, player data, and active runtimers |
 | `/clx help` | Display the full list of commands and syntax guide |
 
 ---

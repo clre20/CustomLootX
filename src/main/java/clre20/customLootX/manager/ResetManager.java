@@ -37,6 +37,7 @@ public class ResetManager {
     private final Map<String, Location> locationCache = new ConcurrentHashMap<>();
     private BukkitTask tickerTask;
     private volatile boolean dirty = false;
+    private int autoSaveCounter = 0;
 
     public static class ResetSession {
         final UUID sessionId;
@@ -134,7 +135,9 @@ public class ResetManager {
             }
         }
 
-        if (dirty) {
+        autoSaveCounter++;
+        if (autoSaveCounter >= 30 && dirty) {
+            autoSaveCounter = 0;
             saveRuntimeData(false);
         }
     }

@@ -127,7 +127,7 @@ public class VaultTemplate {
     }
 
     public boolean isTotalChanceValid() {
-        return Math.abs(getTotalChance() - 100.0) < 0.0001;
+        return Math.abs(getTotalChance() - 100.0) < 0.00001;
     }
 
     public String getBroadcastMessage() {
@@ -170,12 +170,13 @@ public class VaultTemplate {
             return null;
         }
 
-        double random = ThreadLocalRandom.current().nextDouble() * totalWeight;
+        // 隨機擲骰取 5 位小數 (對齊 1.00000 ~ 100.00000 精度)
+        double random = TextUtil.rollRandomChance(totalWeight);
         double cumulative = 0.0;
 
         for (LootItem item : available) {
             cumulative += item.getChance();
-            if (random < cumulative) {
+            if (random <= cumulative) {
                 return item;
             }
         }

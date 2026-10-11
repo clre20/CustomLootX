@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -146,6 +147,24 @@ public class LootLimitManager {
             }
         }
 
+        // 4. 個人上限檢查 (每人總量上限，存於 playerdata/[uuid].yml)
+        if (playerUuid != null && loot.getLimitPlayerTotal() > 0) {
+            int currentPlayerTotal = plugin.getPlayerDataManager().getPlayerData(playerUuid).getLootTotalCount(fullKey);
+            if (currentPlayerTotal >= loot.getLimitPlayerTotal()) {
+                String pName = playerUuid.toString();
+                if (Bukkit.getPlayer(playerUuid) != null) {
+                    pName = Bukkit.getPlayer(playerUuid).getName();
+                } else {
+                    org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(playerUuid);
+                    if (op.getName() != null) pName = op.getName();
+                }
+                String itemName = (loot.getItem() != null) ? TextUtil.getItemName(loot.getItem()) : getItemKey(loot);
+                plugin.logConsole("&6[出貨上限·攔截]&7 玩家 &f" + pName + " &7於 &e[" + templateType + ":" + templateName + "]&7 的物品 &f" + itemName +
+                        " &7已達個人上限 &c(" + currentPlayerTotal + "/" + loot.getLimitPlayerTotal() + ")&7，已自抽獎池移除！");
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -188,6 +207,30 @@ public class LootLimitManager {
             String itemName = (loot.getItem() != null) ? TextUtil.getItemName(loot.getItem()) : getItemKey(loot);
             plugin.logConsole("&a[出貨上限·計數]&7 玩家 &f" + pName + " &7於 &e[" + templateType + ":" + templateName + "]&7 獲得物品 &f" + itemName +
                     "&7，今日個人累計: &e" + newCount + "/" + loot.getLimitPlayerDaily());
+        }
+
+        // 累計個人總上限紀錄 (存於 playerdata/[uuid].yml)
+        if (playerUuid != null && (loot.getLimitPlayerTotal() > 0 || loot.getLimitPlayerDaily() > 0)) {
+            clre20.customLootX.model.PlayerData pData = plugin.getPlayerDataManager().getPlayerData(playerUuid);
+            if (pData != null) {
+                if (loot.getLimitPlayerTotal() > 0) {
+                    int newTotal = pData.incrementLootTotalCount(fullKey);
+                    String pName = playerUuid.toString();
+                    if (Bukkit.getPlayer(playerUuid) != null) {
+                        pName = Bukkit.getPlayer(playerUuid).getName();
+                    } else {
+                        org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(playerUuid);
+                        if (op.getName() != null) pName = op.getName();
+                    }
+                    String itemName = (loot.getItem() != null) ? TextUtil.getItemName(loot.getItem()) : getItemKey(loot);
+                    plugin.logConsole("&a[出貨上限·計數]&7 玩家 &f" + pName + " &7於 &e[" + templateType + ":" + templateName + "]&7 獲得物品 &f" + itemName +
+                            "&7，個人總計累計: &e" + newTotal + "/" + loot.getLimitPlayerTotal());
+                }
+                if (loot.getLimitPlayerDaily() > 0) {
+                    pData.incrementLootDailyCount(today, fullKey);
+                }
+                plugin.getPlayerDataManager().markDirty(playerUuid);
+            }
         }
 
         this.dirty = true;
@@ -352,30 +395,110 @@ public class LootLimitManager {
     }
 
     /**
-     * 重設所有出貨上限紀錄 (清空所有計數)
+     * 重設所有出貨上限紀錄 (預設全部日/月/終生)
      */
     public synchronized void resetAllLimits() {
-        dailyServerCounts.clear();
-        monthlyServerCounts.clear();
-        dailyPlayerCounts.clear();
-        this.dirty = true;
-        save();
-        plugin.logConsole("&a[出貨上限]&7 已重設清空所有伺服器與玩家的出貨上限紀錄。");
+        resetAllLimits("all", null);
     }
 
     /**
-     * 重設指定玩家的今日出貨紀錄
+     * 重設所有出貨上限紀錄 (支援指定模式與關鍵字過濾)
+     */
+    public synchronized void resetAllLimits(String mode, String itemKeyword) {
+        boolean resetDaily = "all".equalsIgnoreCase(mode) || "daily".equalsIgnoreCase(mode);
+        boolean hasKeyword = (itemKeyword != null && !itemKeyword.trim().isEmpty());
+        String lowerKeyword = hasKeyword ? itemKeyword.trim().toLowerCase() : null;
+
+        if (resetDaily) {
+            if (!hasKeyword) {
+                dailyServerCounts.clear();
+                monthlyServerCounts.clear();
+                dailyPlayerCounts.clear();
+            } else {
+                dailyServerCounts.values().forEach(m -> m.keySet().removeIf(k -> k.toLowerCase().contains(lowerKeyword)));
+                monthlyServerCounts.values().forEach(m -> m.keySet().removeIf(k -> k.toLowerCase().contains(lowerKeyword)));
+                dailyPlayerCounts.values().forEach(m -> m.keySet().removeIf(k -> k.toLowerCase().contains(lowerKeyword)));
+            }
+        }
+
+        if (plugin.getPlayerDataManager() != null) {
+            plugin.getPlayerDataManager().resetAllPlayersLimits(mode, itemKeyword);
+        }
+
+        this.dirty = true;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, this::save);
+        plugin.logConsole("&a[出貨上限]&7 已重設出貨上限紀錄 (模式: " + mode + (hasKeyword ? ", 關鍵字: " + itemKeyword : "") + ")。");
+    }
+
+    /**
+     * 重設指定玩家的出貨紀錄 (預設全部)
      */
     public synchronized void resetPlayerLimits(UUID uuid) {
+        resetPlayerLimits(uuid, "all", null);
+    }
+
+    /**
+     * 重設指定玩家的出貨紀錄 (支援指定模式與關鍵字過濾)
+     */
+    public synchronized void resetPlayerLimits(UUID uuid, String mode, String itemKeyword) {
+        if (uuid == null) return;
+        boolean resetDaily = "all".equalsIgnoreCase(mode) || "daily".equalsIgnoreCase(mode);
+        boolean hasKeyword = (itemKeyword != null && !itemKeyword.trim().isEmpty());
+        String lowerKeyword = hasKeyword ? itemKeyword.trim().toLowerCase() : null;
+
+        if (resetDaily) {
+            String today = getTodayKey();
+            Map<String, Map<UUID, Integer>> dayMap = dailyPlayerCounts.get(today);
+            if (dayMap != null) {
+                if (!hasKeyword) {
+                    for (Map<UUID, Integer> pMap : dayMap.values()) {
+                        pMap.remove(uuid);
+                    }
+                } else {
+                    for (Map.Entry<String, Map<UUID, Integer>> entry : dayMap.entrySet()) {
+                        if (entry.getKey().toLowerCase().contains(lowerKeyword)) {
+                            entry.getValue().remove(uuid);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (plugin.getPlayerDataManager() != null) {
+            plugin.getPlayerDataManager().resetPlayerLimits(uuid, mode, itemKeyword);
+        }
+
+        this.dirty = true;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, this::save);
+    }
+
+    /**
+     * 取得已記錄的物品 Key 清單 (用於指令補全)
+     */
+    public Set<String> getKnownItemKeys(UUID uuid) {
+        Set<String> keys = new java.util.LinkedHashSet<>();
         String today = getTodayKey();
         Map<String, Map<UUID, Integer>> dayMap = dailyPlayerCounts.get(today);
         if (dayMap != null) {
-            for (Map<UUID, Integer> pMap : dayMap.values()) {
-                pMap.remove(uuid);
+            for (Map.Entry<String, Map<UUID, Integer>> entry : dayMap.entrySet()) {
+                if (uuid == null || entry.getValue().containsKey(uuid)) {
+                    keys.add(entry.getKey());
+                }
             }
         }
-        this.dirty = true;
-        save();
+        if (plugin.getPlayerDataManager() != null) {
+            if (uuid != null) {
+                clre20.customLootX.model.PlayerData pd = plugin.getPlayerDataManager().getPlayerData(uuid);
+                if (pd != null) {
+                    keys.addAll(pd.getLootTotalCounts().keySet());
+                }
+            } else {
+                for (clre20.customLootX.model.PlayerData pd : plugin.getPlayerDataManager().getDataCache().values()) {
+                    keys.addAll(pd.getLootTotalCounts().keySet());
+                }
+            }
+        }
+        return keys;
     }
 
     public Map<String, Integer> getPlayerTodayCounts(UUID playerUuid) {

@@ -56,8 +56,8 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
                     "&8------------------------",
                     "&7內部代號: &f" + targetMob.getMobId(),
                     "&7類型: " + (targetMob.isMythic() ? "&dMythicMob 自訂怪物" : "&a原版生物"),
-                    "&e目前設定機率: &a" + String.format("%.2f%%", targetMob.getChance()),
-                    "&7怪物池總機率: &f" + String.format("%.2f%%", context.getTemplate().getTotalMobChance()),
+                    "&e目前設定機率: &a" + TextUtil.formatPercent(targetMob.getChance()),
+                    "&7怪物池總機率: &f" + TextUtil.formatPercent(context.getTemplate().getTotalMobChance()),
                     "&8------------------------"
             );
             for (String line : chanceLore) {
@@ -91,8 +91,8 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
         double currentMobChance = targetMob.getChance();
         double otherChances = currentTotal - currentMobChance;
         double needed = 100.0 - otherChances;
-        if (needed > 0.0001 && needed <= 100.0) {
-            inventory.setItem(22, createButton(Material.GOLD_BLOCK, "&6自動補足至 100%", List.of("&7將此怪物機率直接調整為 &e" + String.format("%.2f%%", needed), "&7使整體怪物池總和恰好等於 100.00%")));
+        if (needed > 0.00001 && needed <= 100.0) {
+            inventory.setItem(22, createButton(Material.GOLD_BLOCK, "&6自動補足至 100%", List.of("&7將此怪物機率直接調整為 &e" + TextUtil.formatPercent(needed), "&7使整體怪物池總和恰好等於 100.00%")));
         } else {
             inventory.setItem(22, createButton(Material.GRAY_DYE, "&8自動補足至 100% (無法補足)", List.of("&7其他怪物機率總和已滿或超出 100%")));
         }
@@ -154,7 +154,7 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
                         input -> {
                             try {
                                 double val = Double.parseDouble(input.trim().replace("%", ""));
-                                if (val <= 0.0 || val > 100.0) {
+                                if (val < 0.00001 || val > 100.0) {
                                     context.getPlugin().getConfigManager().send(player, "input-invalid");
                                     context.getPlugin().getConfigManager().playSound(player, "error");
                                 } else {
@@ -182,7 +182,7 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
                 double currentMobChance = targetMob.getChance();
                 double otherChances = currentTotal - currentMobChance;
                 double needed = 100.0 - otherChances;
-                if (needed > 0.0001 && needed <= 100.0) {
+                if (needed > 0.00001 && needed <= 100.0) {
                     targetMob.setChance(TextUtil.roundChance(needed));
                     context.getPlugin().getConfigManager().playSound(player, "success");
                     render();
@@ -215,14 +215,14 @@ public class SpawnerMobChanceGui extends CustomGuiHolder {
     private void adjustChance(double delta, Player player) {
         double current = targetMob.getChance();
         double newVal = TextUtil.roundChance(current + delta);
-        if (newVal <= 0.0) {
-            newVal = 0.01;
+        if (newVal < 0.00001) {
+            newVal = 0.00001;
         }
         if (newVal > 100.0) {
             newVal = 100.0;
         }
 
-        if (newVal != current) {
+        if (Math.abs(newVal - current) > 0.000001) {
             targetMob.setChance(newVal);
             context.getPlugin().getConfigManager().playSound(player, "click");
             render();

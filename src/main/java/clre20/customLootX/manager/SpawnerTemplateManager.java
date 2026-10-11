@@ -21,7 +21,6 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.potion.PotionEffectType;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -184,6 +183,7 @@ public class SpawnerTemplateManager {
                 int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
                 int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
                 int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+                int limitPlayerTotal = (map.get("limit-player-total") instanceof Number n) ? n.intValue() : 0;
 
                 LootItem lootItem;
                 if (isAir || item == null) {
@@ -194,6 +194,7 @@ public class SpawnerTemplateManager {
                 lootItem.setLimitServerDaily(limitServerDaily);
                 lootItem.setLimitServerMonthly(limitServerMonthly);
                 lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                lootItem.setLimitPlayerTotal(limitPlayerTotal);
                 items.add(lootItem);
             }
         }
@@ -321,6 +322,9 @@ public class SpawnerTemplateManager {
             if (loot.getLimitPlayerDaily() > 0) {
                 map.put("limit-player-daily", loot.getLimitPlayerDaily());
             }
+            if (loot.getLimitPlayerTotal() > 0) {
+                map.put("limit-player-total", loot.getLimitPlayerTotal());
+            }
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -385,6 +389,11 @@ public class SpawnerTemplateManager {
         VaultCooldownMode mode = template.getCooldownMode();
         switch (mode) {
             case ONCE_PER_PLAYER -> {
+                if (playerUuid != null && plugin.getPlayerDataManager() != null) {
+                    if (plugin.getPlayerDataManager().getPlayerData(playerUuid).hasCompletedSpawner(key)) {
+                        return -1; // 終生已完成過 (來自 playerdata/[uuid].yml)
+                    }
+                }
                 Set<UUID> set = rewardedPlayers.get(key);
                 if (set != null && set.contains(playerUuid)) {
                     return -1; // 終生已完成過
@@ -399,6 +408,12 @@ public class SpawnerTemplateManager {
                 return 0;
             }
             case PLAYER_COOLDOWN -> {
+                if (playerUuid != null && plugin.getPlayerDataManager() != null) {
+                    long pExpire = plugin.getPlayerDataManager().getPlayerData(playerUuid).getSpawnerCooldown(key);
+                    if (pExpire > now) {
+                        return Math.max(1, (pExpire - now) / 1000);
+                    }
+                }
                 Map<UUID, Long> map = playerCooldowns.get(key);
                 if (map != null) {
                     Long expire = map.get(playerUuid);
@@ -480,6 +495,12 @@ public class SpawnerTemplateManager {
         switch (template.getCooldownMode()) {
             case ONCE_PER_PLAYER -> {
                 rewardedPlayers.computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet()).addAll(playerUuids);
+                if (plugin.getPlayerDataManager() != null) {
+                    for (UUID uuid : playerUuids) {
+                        plugin.getPlayerDataManager().getPlayerData(uuid).addCompletedSpawner(key);
+                        plugin.getPlayerDataManager().markDirty(uuid);
+                    }
+                }
             }
             case GLOBAL_COOLDOWN -> {
                 globalCooldowns.put(key, expireTime);
@@ -488,6 +509,12 @@ public class SpawnerTemplateManager {
                 Map<UUID, Long> map = playerCooldowns.computeIfAbsent(key, k -> new ConcurrentHashMap<>());
                 for (UUID uuid : playerUuids) {
                     map.put(uuid, expireTime);
+                }
+                if (plugin.getPlayerDataManager() != null) {
+                    for (UUID uuid : playerUuids) {
+                        plugin.getPlayerDataManager().getPlayerData(uuid).setSpawnerCooldown(key, expireTime);
+                        plugin.getPlayerDataManager().markDirty(uuid);
+                    }
                 }
             }
         }
@@ -958,12 +985,6 @@ public class SpawnerTemplateManager {
                 if (p.isDead() || !p.isValid()) continue;
                 GameMode gm = p.getGameMode();
                 if (gm != GameMode.SURVIVAL && gm != GameMode.ADVENTURE) continue;
-
-                if (!template.isOminous()) {
-                    if (p.hasPotionEffect(PotionEffectType.BAD_OMEN)) p.removePotionEffect(PotionEffectType.BAD_OMEN);
-                    if (p.hasPotionEffect(PotionEffectType.TRIAL_OMEN)) p.removePotionEffect(PotionEffectType.TRIAL_OMEN);
-                    if (p.hasPotionEffect(PotionEffectType.RAID_OMEN)) p.removePotionEffect(PotionEffectType.RAID_OMEN);
-                }
 
                 if (p.getLocation().distanceSquared(loc) <= rangeSq) {
                     // 檢查玩家冷卻資格

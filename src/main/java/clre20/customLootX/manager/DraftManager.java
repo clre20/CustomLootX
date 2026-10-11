@@ -279,6 +279,7 @@ public class DraftManager {
             if (item.getLimitServerDaily() > 0) map.put("limit-server-daily", item.getLimitServerDaily());
             if (item.getLimitServerMonthly() > 0) map.put("limit-server-monthly", item.getLimitServerMonthly());
             if (item.getLimitPlayerDaily() > 0) map.put("limit-player-daily", item.getLimitPlayerDaily());
+            if (item.getLimitPlayerTotal() > 0) map.put("limit-player-total", item.getLimitPlayerTotal());
             if (!item.isAir() && item.getItem() != null) {
                 map.put("item", item.getItem());
             }
@@ -315,6 +316,7 @@ public class DraftManager {
                     int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
                     int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
                     int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+                    int limitPlayerTotal = (map.get("limit-player-total") instanceof Number n) ? n.intValue() : 0;
 
                     ItemStack item = null;
                     Object iObj = map.get("item");
@@ -329,6 +331,7 @@ public class DraftManager {
                     lootItem.setLimitServerDaily(limitServerDaily);
                     lootItem.setLimitServerMonthly(limitServerMonthly);
                     lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                    lootItem.setLimitPlayerTotal(limitPlayerTotal);
                     template.addItem(lootItem);
                 }
             }
@@ -360,6 +363,7 @@ public class DraftManager {
             if (loot.getLimitServerDaily() > 0) map.put("limit-server-daily", loot.getLimitServerDaily());
             if (loot.getLimitServerMonthly() > 0) map.put("limit-server-monthly", loot.getLimitServerMonthly());
             if (loot.getLimitPlayerDaily() > 0) map.put("limit-player-daily", loot.getLimitPlayerDaily());
+            if (loot.getLimitPlayerTotal() > 0) map.put("limit-player-total", loot.getLimitPlayerTotal());
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -400,6 +404,7 @@ public class DraftManager {
                     int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
                     int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
                     int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+                    int limitPlayerTotal = (map.get("limit-player-total") instanceof Number n) ? n.intValue() : 0;
 
                     ItemStack item = null;
                     Object iObj = map.get("item");
@@ -414,6 +419,7 @@ public class DraftManager {
                     lootItem.setLimitServerDaily(limitServerDaily);
                     lootItem.setLimitServerMonthly(limitServerMonthly);
                     lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                    lootItem.setLimitPlayerTotal(limitPlayerTotal);
                     items.add(lootItem);
                 }
             }
@@ -482,6 +488,7 @@ public class DraftManager {
             if (loot.getLimitServerDaily() > 0) map.put("limit-server-daily", loot.getLimitServerDaily());
             if (loot.getLimitServerMonthly() > 0) map.put("limit-server-monthly", loot.getLimitServerMonthly());
             if (loot.getLimitPlayerDaily() > 0) map.put("limit-player-daily", loot.getLimitPlayerDaily());
+            if (loot.getLimitPlayerTotal() > 0) map.put("limit-player-total", loot.getLimitPlayerTotal());
             if (loot.isAir() || loot.getItem() == null) {
                 map.put("is-air", true);
             } else {
@@ -548,6 +555,7 @@ public class DraftManager {
                     int limitServerDaily = (map.get("limit-server-daily") instanceof Number n) ? n.intValue() : 0;
                     int limitServerMonthly = (map.get("limit-server-monthly") instanceof Number n) ? n.intValue() : 0;
                     int limitPlayerDaily = (map.get("limit-player-daily") instanceof Number n) ? n.intValue() : 0;
+                    int limitPlayerTotal = (map.get("limit-player-total") instanceof Number n) ? n.intValue() : 0;
 
                     ItemStack item = null;
                     Object iObj = map.get("item");
@@ -562,6 +570,7 @@ public class DraftManager {
                     lootItem.setLimitServerDaily(limitServerDaily);
                     lootItem.setLimitServerMonthly(limitServerMonthly);
                     lootItem.setLimitPlayerDaily(limitPlayerDaily);
+                    lootItem.setLimitPlayerTotal(limitPlayerTotal);
                     items.add(lootItem);
                 }
             }

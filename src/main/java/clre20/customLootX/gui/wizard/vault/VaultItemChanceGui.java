@@ -69,8 +69,8 @@ public class VaultItemChanceGui extends CustomGuiHolder {
                             "&7寶庫掉落總機率: %total%",
                             "&8------------------------"
                     ),
-                    "%chance%", String.format("%.2f%%", targetItem.getChance()),
-                    "%total%", String.format("%.2f%%", context.getTemplate().getTotalChance())
+                    "%chance%", TextUtil.formatPercent(targetItem.getChance()),
+                    "%total%", TextUtil.formatPercent(context.getTemplate().getTotalChance())
             );
             for (String line : chanceLore) {
                 currentLore.add(TextUtil.parse(line));
@@ -103,8 +103,8 @@ public class VaultItemChanceGui extends CustomGuiHolder {
         double currentItemChance = targetItem.getChance();
         double otherChances = currentTotal - currentItemChance;
         double needed = 100.0 - otherChances;
-        if (needed > 0.0001 && needed <= 100.0) {
-            inventory.setItem(22, createButton(Material.GOLD_BLOCK, context.getPlugin().getConfigManager().getText("gui.chance.btn-fill-name", "&6自動補足至 100%"), context.getPlugin().getConfigManager().getStringList("gui.chance.btn-fill-lore", List.of("&7將此物品機率直接調整為 &e%need%", "&7使整體掉落物總和恰好等於 100.00%"), "%need%", String.format("%.2f%%", needed))));
+        if (needed > 0.00001 && needed <= 100.0) {
+            inventory.setItem(22, createButton(Material.GOLD_BLOCK, context.getPlugin().getConfigManager().getText("gui.chance.btn-fill-name", "&6自動補足至 100%"), context.getPlugin().getConfigManager().getStringList("gui.chance.btn-fill-lore", List.of("&7將此物品機率直接調整為 &e%need%", "&7使整體掉落物總和恰好等於 100.00%"), "%need%", TextUtil.formatPercent(needed))));
         } else {
             inventory.setItem(22, createButton(Material.GRAY_DYE, context.getPlugin().getConfigManager().getText("gui.chance.btn-fill-disabled-name", "&8自動補足至 100% (無法補足)"), context.getPlugin().getConfigManager().getStringList("gui.chance.btn-fill-disabled-lore", List.of("&7其他物品機率總和已滿或超出 100%"))));
         }
@@ -154,6 +154,21 @@ public class VaultItemChanceGui extends CustomGuiHolder {
         );
         inventory.setItem(5, createButton(Material.PLAYER_HEAD, pDailyName, pDailyLore));
 
+        // Slot 6: 個人上限 (玩家終身/累積總上限，存於 playerdata/[uuid].yml)
+        int pTotal = targetItem.getLimitPlayerTotal();
+        String pTotalName = "&6👑 個人上限: " + (pTotal > 0 ? "&a" + pTotal + " 個" : "&7無限制 (0)");
+        List<String> pTotalLore = List.of(
+                "&7設定單一玩家在此物品上「累積總共」最多能開出的數量",
+                "&7達到上限後，該玩家未來再抽中將自動轉為落空",
+                "&7資料將永久記錄於玩家數據檔 (playerdata/[uuid].yml)",
+                "&7",
+                "&7目前設定: " + (pTotal > 0 ? "&e" + pTotal + " 個 / 終身" : "&7無限制 (0)"),
+                "&8------------------------",
+                "&a[點擊] &e聊天室直接輸入數值",
+                "&c[右鍵 / F鍵] &7快速重設為 0 (無限制)"
+        );
+        inventory.setItem(6, createButton(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE, pTotalName, pTotalLore));
+
         // Slot 24: 全服獲獎通告開關
         boolean bc = targetItem.isBroadcast();
         String bcName = bc ? "&6📢 抽中全服通告: &a【已開啟】" : "&6📢 抽中全服通告: &7【已關閉】";
@@ -195,6 +210,7 @@ public class VaultItemChanceGui extends CustomGuiHolder {
             case 3 -> handleLimitClick(event, targetItem.getLimitServerDaily(), targetItem::setLimitServerDaily, "全服每日上限", player);
             case 4 -> handleLimitClick(event, targetItem.getLimitServerMonthly(), targetItem::setLimitServerMonthly, "全服每月上限", player);
             case 5 -> handleLimitClick(event, targetItem.getLimitPlayerDaily(), targetItem::setLimitPlayerDaily, "個人每日上限", player);
+            case 6 -> handleLimitClick(event, targetItem.getLimitPlayerTotal(), targetItem::setLimitPlayerTotal, "個人上限", player);
 
             case 9 -> adjustChance(-10.0, player);
             case 10 -> adjustChance(-1.0, player);
@@ -220,13 +236,13 @@ public class VaultItemChanceGui extends CustomGuiHolder {
                         context.getPlugin().getConfigManager().getRawMessage("input-prompt"),
                         input -> {
                             try {
-                                double val = Double.parseDouble(input.trim());
-                                if (val <= 0.0 || val > 100.0) {
+                                double val = Double.parseDouble(input.trim().replace("%", ""));
+                                if (val < 0.00001 || val > 100.0) {
                                     context.getPlugin().getConfigManager().send(player, "input-invalid");
                                     context.getPlugin().getConfigManager().playSound(player, "error");
                                 } else {
                                     targetItem.setChance(TextUtil.roundChance(val));
-                                    context.getPlugin().getConfigManager().send(player, "input-success", "%chance%", String.format("%.2f%%", targetItem.getChance()));
+                                    context.getPlugin().getConfigManager().send(player, "input-success", "%chance%", TextUtil.formatPercent(targetItem.getChance()));
                                     context.getPlugin().getConfigManager().playSound(player, "success");
                                 }
                             } catch (NumberFormatException e) {
@@ -250,7 +266,7 @@ public class VaultItemChanceGui extends CustomGuiHolder {
                 double currentItemChance = targetItem.getChance();
                 double otherChances = currentTotal - currentItemChance;
                 double needed = 100.0 - otherChances;
-                if (needed > 0.0001 && needed <= 100.0) {
+                if (needed > 0.00001 && needed <= 100.0) {
                     targetItem.setChance(TextUtil.roundChance(needed));
                     context.getPlugin().getConfigManager().playSound(player, "success");
                     render();
@@ -284,13 +300,13 @@ public class VaultItemChanceGui extends CustomGuiHolder {
     private void adjustChance(double delta, Player player) {
         double current = targetItem.getChance();
         double newVal = TextUtil.roundChance(current + delta);
-        if (newVal < 0.01) {
-            newVal = 0.01;
+        if (newVal < 0.00001) {
+            newVal = 0.00001;
         }
         if (newVal > 100.0) {
             newVal = 100.0;
         }
-        if (Math.abs(newVal - current) > 0.0001) {
+        if (Math.abs(newVal - current) > 0.000001) {
             targetItem.setChance(newVal);
             context.getPlugin().getConfigManager().playSound(player, "click");
             render();

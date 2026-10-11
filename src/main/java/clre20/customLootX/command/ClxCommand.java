@@ -78,7 +78,7 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.delete", "&e/%label% delete <suspicious|vault|spawner> <名稱> &7- 刪除指定的配置檔案", "%label%", label));
         sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.reload", "&e/%label% reload &7- 重新讀取所有設定與資料檔", "%label%", label));
         sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.checklimit", "&e/%label% checklimit [玩家|all] &7- 查詢今日物品已出貨累計次數", "%label%", label));
-        sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.resetlimit", "&e/%label% resetlimit [玩家|all] &7- 重設出貨上限紀錄", "%label%", label));
+        sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.resetlimit", "&e/%label% resetlimit <玩家|all> [daily|total|all] [物品] &7- 重設每日或終生出貨上限紀錄", "%label%", label));
         sender.sendMessage(plugin.getConfigManager().getComponent("commands.help.footer", "&8=============================================="));
     }
 
@@ -516,13 +516,53 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleResetLimit(CommandSender sender, String label, String[] args) {
-        if (args.length >= 2 && !args[1].equalsIgnoreCase("all")) {
-            org.bukkit.OfflinePlayer target = org.bukkit.Bukkit.getOfflinePlayer(args[1]);
-            plugin.getLootLimitManager().resetPlayerLimits(target.getUniqueId());
-            sender.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&a已重設玩家 &e" + args[1] + "&a 的今日出貨上限紀錄！"));
+        if (args.length < 2) {
+            sender.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&c用法: /" + label + " resetlimit <玩家|all> [daily|total|all] [物品關鍵字 (選填)]"));
+            sender.sendMessage(TextUtil.parse("&7  &edaily&7: 重設每日出貨上限"));
+            sender.sendMessage(TextUtil.parse("&7  &etotal&7: 重設終生/個人總出貨上限"));
+            sender.sendMessage(TextUtil.parse("&7  &eall&7:   重設全部 (每日+終生) 上限 (預設)"));
+            return;
+        }
+
+        String targetArg = args[1];
+        String mode = "all";
+        String itemKeyword = null;
+
+        if (args.length >= 3) {
+            String m = args[2].toLowerCase();
+            if (m.equals("total") || m.equals("lifetime") || m.equals("終生") || m.equals("個人")) {
+                mode = "total";
+                if (args.length >= 4) itemKeyword = args[3];
+            } else if (m.equals("daily") || m.equals("day") || m.equals("每日") || m.equals("日")) {
+                mode = "daily";
+                if (args.length >= 4) itemKeyword = args[3];
+            } else if (m.equals("all") || m.equals("全部")) {
+                mode = "all";
+                if (args.length >= 4) itemKeyword = args[3];
+            } else {
+                // 如果 args[2] 不是模式名稱，視為物品關鍵字，模式為預設 all
+                itemKeyword = args[2];
+            }
+        }
+
+        String modeDisplay = switch (mode) {
+            case "total" -> "【終生】";
+            case "daily" -> "【每日】";
+            default -> "【全部 (每日+終生)】";
+        };
+
+        String itemDisplay = (itemKeyword != null) ? ("包含關鍵字 [&e" + itemKeyword + "&a] 的") : "";
+
+        if (targetArg.equalsIgnoreCase("all")) {
+            plugin.getLootLimitManager().resetAllLimits(mode, itemKeyword);
+            sender.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&a已成功重設全伺服器所有玩家" + itemDisplay + modeDisplay + "出貨上限紀錄！"));
+            plugin.getConfigManager().log("cmd-resetlimit-all", "%sender%", sender.getName(), "%mode%", mode, "%item%", (itemKeyword != null ? itemKeyword : "ALL"));
         } else {
-            plugin.getLootLimitManager().resetAllLimits();
-            sender.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&a已成功重設清空全服所有出貨上限紀錄！"));
+            org.bukkit.OfflinePlayer target = Bukkit.getOfflinePlayer(targetArg);
+            String targetName = target.getName() != null ? target.getName() : targetArg;
+            plugin.getLootLimitManager().resetPlayerLimits(target.getUniqueId(), mode, itemKeyword);
+            sender.sendMessage(TextUtil.parse(plugin.getConfigManager().getPrefix() + "&a已成功重設玩家 &e" + targetName + "&a " + itemDisplay + modeDisplay + "出貨上限紀錄！"));
+            plugin.getConfigManager().log("cmd-resetlimit-player", "%sender%", sender.getName(), "%target%", targetName, "%mode%", mode, "%item%", (itemKeyword != null ? itemKeyword : "ALL"));
         }
     }
 
@@ -557,13 +597,24 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
 
     private void showPlayerLimit(CommandSender sender, String targetName, UUID targetUuid, boolean showAdminPrefix) {
         Map<String, Integer> counts = plugin.getLootLimitManager().getPlayerTodayCounts(targetUuid);
-        String headerTitle = showAdminPrefix ? ("&6玩家 &e" + targetName + " &6今日出貨統計") : "&6【我的今日出貨額度統計】";
+        Map<String, Integer> totalCounts = (plugin.getPlayerDataManager() != null)
+                ? plugin.getPlayerDataManager().getPlayerData(targetUuid).getLootTotalCounts()
+                : Collections.emptyMap();
+
+        String headerTitle = showAdminPrefix ? ("&6玩家 &e" + targetName + " &6出貨統計") : "&6【我的出貨額度統計】";
         sender.sendMessage(TextUtil.parse("&8============ " + headerTitle + " &8============"));
+        sender.sendMessage(TextUtil.parse("&e[今日出貨統計]"));
         if (counts.isEmpty()) {
-            sender.sendMessage(TextUtil.parse("&7今日尚無任何受限制物品的出貨紀錄。"));
+            sender.sendMessage(TextUtil.parse(" &7今日尚無任何受限制物品的出貨紀錄。"));
         } else {
             for (Map.Entry<String, Integer> entry : counts.entrySet()) {
                 sender.sendMessage(TextUtil.parse(" &7- &f" + entry.getKey() + ": 今日已出貨 &e" + entry.getValue() + " &7次"));
+            }
+        }
+        if (!totalCounts.isEmpty()) {
+            sender.sendMessage(TextUtil.parse("&e[個人累積總出貨 (終身上限)]"));
+            for (Map.Entry<String, Integer> entry : totalCounts.entrySet()) {
+                sender.sendMessage(TextUtil.parse(" &7- &f" + entry.getKey() + ": 累計已出貨 &e" + entry.getValue() + " &7次"));
             }
         }
         sender.sendMessage(TextUtil.parse("&8=========================================================="));
@@ -628,6 +679,10 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
             String sub = args[0].toLowerCase();
             String category = args[1].toLowerCase();
 
+            if (sub.equals("resetlimit")) {
+                return filter(Arrays.asList("all", "total", "daily"), args[2]);
+            }
+
             if (sub.equals("create")) {
                 if (category.equals("spawner") || category.equals("vault")) {
                     return filter(Arrays.asList("normal", "ominous"), args[2]);
@@ -658,10 +713,19 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
             }
         }
 
-        // 第 4 個參數 (針對 give 或 key 指令)：補全玩家名稱或預設數量
+        // 第 4 個參數 (針對 give、key 或 resetlimit 指令)
         if (args.length == 4) {
             String sub = args[0].toLowerCase();
-            if (sub.equals("give")) {
+            if (sub.equals("resetlimit")) {
+                String targetArg = args[1];
+                UUID targetUuid = null;
+                if (!targetArg.equalsIgnoreCase("all")) {
+                    org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(targetArg);
+                    if (op != null) targetUuid = op.getUniqueId();
+                }
+                java.util.Set<String> keys = plugin.getLootLimitManager().getKnownItemKeys(targetUuid);
+                return filter(new ArrayList<>(keys), args[3]);
+            } else if (sub.equals("give")) {
                 List<String> suggestions = new ArrayList<>();
                 suggestions.addAll(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList());
                 suggestions.addAll(Arrays.asList("1", "16", "64"));

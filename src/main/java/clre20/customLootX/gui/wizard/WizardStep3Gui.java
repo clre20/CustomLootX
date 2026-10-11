@@ -90,6 +90,7 @@ public class WizardStep3Gui extends CustomGuiHolder {
                     if (lootItem.getLimitServerDaily() > 0) limitParts.add("全服日:" + lootItem.getLimitServerDaily());
                     if (lootItem.getLimitServerMonthly() > 0) limitParts.add("全服月:" + lootItem.getLimitServerMonthly());
                     if (lootItem.getLimitPlayerDaily() > 0) limitParts.add("個人日:" + lootItem.getLimitPlayerDaily());
+                    if (lootItem.getLimitPlayerTotal() > 0) limitParts.add("個人總:" + lootItem.getLimitPlayerTotal());
                     lore.add(TextUtil.parse("&c🛡️ 出貨上限: &e" + String.join(" &8| &e", limitParts)));
                 }
                 meta.lore(lore);
@@ -239,7 +240,7 @@ public class WizardStep3Gui extends CustomGuiHolder {
                 int itemIndex = page * ITEMS_PER_PAGE + rawSlot;
                 if (itemIndex < template.getItems().size()) {
                     LootItem old = template.getItems().get(itemIndex);
-                    template.getItems().set(itemIndex, new LootItem(toAdd, old.getChance(), old.isBroadcast(), old.getBroadcastMessage(), old.getLimitServerDaily(), old.getLimitServerMonthly(), old.getLimitPlayerDaily()));
+                    template.getItems().set(itemIndex, new LootItem(toAdd, old.getChance(), old.isBroadcast(), old.getBroadcastMessage(), old.getLimitServerDaily(), old.getLimitServerMonthly(), old.getLimitPlayerDaily(), old.getLimitPlayerTotal()));
                 } else {
                     template.addItem(new LootItem(toAdd, initChance));
                 }

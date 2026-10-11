@@ -527,7 +527,7 @@ public class SpawnerTemplate {
             return true;
         }
         if (getMobPool().isEmpty()) return false;
-        return Math.abs(getTotalMobChance() - 100.0) < 0.0001;
+        return Math.abs(getTotalMobChance() - 100.0) < 0.00001;
     }
 
     /**
@@ -612,11 +612,12 @@ public class SpawnerTemplate {
         if (pool.isEmpty()) {
             return new SpawnerMobEntry(getSpawnedType(), 100.0);
         }
-        double random = ThreadLocalRandom.current().nextDouble() * 100.0;
+        // 隨機擲骰取 5 位小數 (對齊 1.00000 ~ 100.00000 精度)
+        double random = TextUtil.rollRandomChance(100.0);
         double cumulative = 0.0;
         for (SpawnerMobEntry entry : pool) {
             cumulative += entry.getChance();
-            if (random < cumulative) {
+            if (random <= cumulative) {
                 return entry;
             }
         }
@@ -640,7 +641,7 @@ public class SpawnerTemplate {
     }
 
     public boolean isTotalChanceValid() {
-        return Math.abs(getTotalChance() - 100.0) < 0.0001;
+        return Math.abs(getTotalChance() - 100.0) < 0.00001;
     }
 
     public String getBroadcastMessage() {
@@ -683,12 +684,13 @@ public class SpawnerTemplate {
             return null;
         }
 
-        double random = ThreadLocalRandom.current().nextDouble() * totalWeight;
+        // 隨機擲骰取 5 位小數 (對齊 1.00000 ~ 100.00000 精度)
+        double random = TextUtil.rollRandomChance(totalWeight);
         double cumulative = 0.0;
 
         for (LootItem item : available) {
             cumulative += item.getChance();
-            if (random < cumulative) {
+            if (random <= cumulative) {
                 return item;
             }
         }

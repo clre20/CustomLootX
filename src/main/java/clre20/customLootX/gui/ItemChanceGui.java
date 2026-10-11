@@ -157,8 +157,8 @@ public class ItemChanceGui extends CustomGuiHolder {
                 "gui.chance.chat-input-lore",
                 List.of(
                         "&7點擊後在聊天室直接輸入數字",
-                        "&7支援範圍: &e0.01 ~ 100.00",
-                        "&7例如輸入: &f15.25"
+                        "&7支援範圍: &e0.00001 ~ 100.00000",
+                        "&7例如輸入: &f45.72305"
                 )
         );
         inventory.setItem(21, createButton(Material.PAPER, chatName, chatLore));
@@ -221,6 +221,21 @@ public class ItemChanceGui extends CustomGuiHolder {
         );
         inventory.setItem(5, createButton(Material.PLAYER_HEAD, pDailyName, pDailyLore));
 
+        // Slot 6: 個人上限 (終生/每人總量上限)
+        int pTotal = lootItem.getLimitPlayerTotal();
+        String pTotalName = "&6🏆 個人上限: " + (pTotal > 0 ? "&a" + pTotal + " 個" : "&7無限制 (0)");
+        List<String> pTotalLore = List.of(
+                "&7設定單一玩家「終生/總共」最多能獲得此物品的數量",
+                "&7達到上限後，該玩家再抽中將自動轉為落空",
+                "&7資料存放: playerdata/<uuid>.yml",
+                "&7",
+                "&7目前設定: " + (pTotal > 0 ? "&e" + pTotal + " 個 / 每人總計" : "&7無限制 (0)"),
+                "&8------------------------",
+                "&a[點擊] &e聊天室直接輸入數值",
+                "&c[右鍵 / F鍵] &7快速重設為 0 (無限制)"
+        );
+        inventory.setItem(6, createButton(Material.NETHERITE_UPGRADE_SMITHING_TEMPLATE, pTotalName, pTotalLore));
+
         // Slot 24: 全服獲獎通告開關
         boolean bc = lootItem.isBroadcast();
         String bcName = bc ? "&6📢 抽中全服通告: &a【已開啟】" : "&6📢 抽中全服通告: &7【已關閉】";
@@ -272,6 +287,7 @@ public class ItemChanceGui extends CustomGuiHolder {
             case 3 -> handleLimitClick(event, item.getLimitServerDaily(), item::setLimitServerDaily, "全服每日上限");
             case 4 -> handleLimitClick(event, item.getLimitServerMonthly(), item::setLimitServerMonthly, "全服每月上限");
             case 5 -> handleLimitClick(event, item.getLimitPlayerDaily(), item::setLimitPlayerDaily, "個人每日上限");
+            case 6 -> handleLimitClick(event, item.getLimitPlayerTotal(), item::setLimitPlayerTotal, "個人上限");
 
             case 9 -> adjustChance(item, -10.00);
             case 10 -> adjustChance(item, -1.00);
@@ -297,11 +313,11 @@ public class ItemChanceGui extends CustomGuiHolder {
                         plugin.getConfigManager().getRawMessage("input-prompt"),
                         input -> {
                             try {
-                                double parsed = Double.parseDouble(input);
-                                if (parsed < 0.01 || parsed > 100.00) {
+                                double parsed = Double.parseDouble(input.trim().replace("%", ""));
+                                if (parsed < 0.00001 || parsed > 100.00000) {
                                     plugin.getConfigManager().send(player, "input-invalid");
                                 } else {
-                                    item.setChance(parsed);
+                                    item.setChance(TextUtil.roundChance(parsed));
                                     plugin.getConfigManager().send(player, "input-success", "%chance%", TextUtil.formatPercent(TextUtil.roundChance(parsed)));
                                     plugin.getConfigManager().playSound(player, "success");
                                 }

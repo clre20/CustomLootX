@@ -161,13 +161,13 @@ messages:
   template-save-failed: "&c儲存配置檔案失敗，請檢查主控台日誌！"
 
   # 聊天室輸入機率提示
-  input-prompt: "&e請在聊天室輸入此物品的機率 (0.01 ~ 100.00)，輸入 &ccancel &e取消："
+  input-prompt: "&e請在聊天室輸入此物品的機率 (0.00001 ~ 100.00000)，輸入 &ccancel &e取消："
 
   # 聊天室輸入機率數值無效提示
-  input-invalid: "&c輸入數值無效，請輸入介於 0.01 到 100.00 的有效數字（最多兩位小數）！"
+  input-invalid: "&c輸入數值無效，請輸入介於 0.00001 到 100.00000 的有效數字（最多五位小數）！"
 
   # 機率數值無效提示
-  chance-invalid: "&c機率數值無效！請輸入介於 0.01 到 100.00 的有效數字。"
+  chance-invalid: "&c機率數值無效！請輸入介於 0.00001 到 100.00000 的有效數字（最多五位小數）。"
 
   # 怪物池機率總和非 100% 提示
   chance-not-100: "&c怪物池機率總和必須恰好為 100.00%（目前總和: &e%total%&c，差額: &e%diff%&c）！"
@@ -244,7 +244,7 @@ commands:
     delete: "&e/%label% delete <名稱> &7- 刪除指定的配置檔案"
     reload: "&e/%label% reload &7- 重新讀取設定與資料檔"
     checklimit: "&e/%label% checklimit [玩家|all] &7- 查詢今日物品已出貨累計次數"
-    resetlimit: "&e/%label% resetlimit [玩家|all] &7- 重設出貨上限紀錄"
+    resetlimit: "&e/%label% resetlimit <玩家|all> [daily|total|all] [物品] &7- 重設每日或終生出貨上限紀錄"
     footer: "&8=============================================="
 
   list:
@@ -558,8 +558,8 @@ gui:
     chat-input-name: "&b聊天室精確輸入"
     chat-input-lore:
       - "&7點擊後在聊天室直接輸入數字"
-      - "&7支援範圍: &e0.01 ~ 100.00"
-      - "&7例如輸入: &f15.25"
+      - "&7支援範圍: &e0.00001 ~ 100.00000"
+      - "&7例如輸入: &f15.25000"
     fill-100-name: "&6一鍵補齊至 100%"
     # %diff%: 需補齊差額
     fill-100-lore:

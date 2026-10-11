@@ -14,6 +14,7 @@ public class LootItem {
     private int limitServerDaily = 0;
     private int limitServerMonthly = 0;
     private int limitPlayerDaily = 0;
+    private int limitPlayerTotal = 0;
 
     public LootItem(ItemStack item, double chance) {
         this(item, chance, false, null);
@@ -24,10 +25,14 @@ public class LootItem {
     }
 
     public LootItem(ItemStack item, double chance, boolean broadcast, String broadcastMessage) {
-        this(item, chance, broadcast, broadcastMessage, 0, 0, 0);
+        this(item, chance, broadcast, broadcastMessage, 0, 0, 0, 0);
     }
 
     public LootItem(ItemStack item, double chance, boolean broadcast, String broadcastMessage, int limitServerDaily, int limitServerMonthly, int limitPlayerDaily) {
+        this(item, chance, broadcast, broadcastMessage, limitServerDaily, limitServerMonthly, limitPlayerDaily, 0);
+    }
+
+    public LootItem(ItemStack item, double chance, boolean broadcast, String broadcastMessage, int limitServerDaily, int limitServerMonthly, int limitPlayerDaily, int limitPlayerTotal) {
         this.item = (item != null && item.getType() != Material.AIR) ? item.clone() : null;
         this.chance = TextUtil.roundChance(chance);
         this.isAir = (this.item == null);
@@ -36,6 +41,7 @@ public class LootItem {
         this.limitServerDaily = Math.max(0, limitServerDaily);
         this.limitServerMonthly = Math.max(0, limitServerMonthly);
         this.limitPlayerDaily = Math.max(0, limitPlayerDaily);
+        this.limitPlayerTotal = Math.max(0, limitPlayerTotal);
     }
 
     public LootItem(double chance, boolean isAir) {
@@ -127,8 +133,16 @@ public class LootItem {
         this.limitPlayerDaily = Math.max(0, limitPlayerDaily);
     }
 
+    public int getLimitPlayerTotal() {
+        return limitPlayerTotal;
+    }
+
+    public void setLimitPlayerTotal(int limitPlayerTotal) {
+        this.limitPlayerTotal = Math.max(0, limitPlayerTotal);
+    }
+
     public boolean hasAnyLimit() {
-        return limitServerDaily > 0 || limitServerMonthly > 0 || limitPlayerDaily > 0;
+        return limitServerDaily > 0 || limitServerMonthly > 0 || limitPlayerDaily > 0 || limitPlayerTotal > 0;
     }
 
     public LootItem cloneItem() {
@@ -141,6 +155,7 @@ public class LootItem {
         cloned.setLimitServerDaily(this.limitServerDaily);
         cloned.setLimitServerMonthly(this.limitServerMonthly);
         cloned.setLimitPlayerDaily(this.limitPlayerDaily);
+        cloned.setLimitPlayerTotal(this.limitPlayerTotal);
         return cloned;
     }
 }
