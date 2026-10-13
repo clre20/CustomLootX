@@ -38,6 +38,8 @@ public class ResetManager {
     private BukkitTask tickerTask;
     private volatile boolean dirty = false;
     private int autoSaveCounter = 0;
+    // 最近一筆排程的到期時間，未到期前 tick 直接跳過走訪
+    private volatile long nextTriggerMillis = 0L;
 
     public static class ResetSession {
         final UUID sessionId;
@@ -114,18 +116,34 @@ public class ResetManager {
         if (pendingResets.isEmpty()) return;
 
         long now = System.currentTimeMillis();
+        if (now < nextTriggerMillis) {
+            // 尚未有任何排程到期：零走訪直接返回
+            maybeAutoSave();
+            return;
+        }
         List<ResetSession> toExecute = new ArrayList<>();
+        long nextTrigger = Long.MAX_VALUE;
 
         Iterator<Map.Entry<String, ResetSession>> it = pendingResets.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, ResetSession> entry = it.next();
             ResetSession session = entry.getValue();
             if (now >= session.triggerTimeMillis) {
+                Location sLoc = session.location;
+                // 區塊未載入時不強制載入區塊 (大型伺服器上會造成大量區塊讀寫)，保留排程待區塊載入後再執行
+                if (sLoc.getWorld() == null || !sLoc.getWorld().isChunkLoaded(sLoc.getBlockX() >> 4, sLoc.getBlockZ() >> 4)) {
+                    nextTrigger = Math.min(nextTrigger, now + 5000L);
+                    continue;
+                }
                 it.remove();
+                locationCache.remove(entry.getKey());
                 toExecute.add(session);
                 dirty = true;
+            } else {
+                nextTrigger = Math.min(nextTrigger, session.triggerTimeMillis);
             }
         }
+        nextTriggerMillis = nextTrigger;
 
         for (ResetSession session : toExecute) {
             try {
@@ -135,8 +153,12 @@ public class ResetManager {
             }
         }
 
+        maybeAutoSave();
+    }
+
+    private void maybeAutoSave() {
         autoSaveCounter++;
-        if (autoSaveCounter >= 30 && dirty) {
+        if (autoSaveCounter >= plugin.getConfigManager().getRuntimeSaveIntervalSeconds() && dirty) {
             autoSaveCounter = 0;
             saveRuntimeData(false);
         }
@@ -162,6 +184,7 @@ public class ResetManager {
         ResetSession session = new ResetSession(sessionId, loc, templateName, delayTicks);
 
         pendingResets.put(locKey, session);
+        nextTriggerMillis = Math.min(nextTriggerMillis, session.triggerTimeMillis);
         dirty = true;
 
         plugin.getConfigManager().log("reset-scheduled",
@@ -180,7 +203,8 @@ public class ResetManager {
      * 取消指定座標的待重置排程
      */
     public void cancelReset(Location loc) {
-        if (loc == null) return;
+        // 熱路徑快速返回：每次放置/破壞任何方塊都會呼叫，沒有待重置排程時不建立任何字串
+        if (loc == null || pendingResets.isEmpty()) return;
         String locKey = toLocationKey(loc);
         locationCache.remove(locKey);
         ResetSession session = pendingResets.remove(locKey);
@@ -203,11 +227,10 @@ public class ResetManager {
         int chunkX = loc.getBlockX() >> 4;
         int chunkZ = loc.getBlockZ() >> 4;
 
-        // 非同步區塊載入：若區塊尚未載入，改用 Paper getChunkAtAsync 避免主執行緒同步卡頓
+        // 區塊已於 tickResets 確認載入；保險起見再檢查一次，未載入則放回排程
         if (!loc.getWorld().isChunkLoaded(chunkX, chunkZ)) {
-            loc.getWorld().getChunkAtAsync(chunkX, chunkZ).thenAccept(chunk -> {
-                Bukkit.getScheduler().runTask(plugin, () -> applyResetBlock(loc, session));
-            });
+            pendingResets.putIfAbsent(toLocationKey(loc), session);
+            nextTriggerMillis = Math.min(nextTriggerMillis, System.currentTimeMillis() + 5000L);
             return;
         }
 
@@ -270,7 +293,7 @@ public class ResetManager {
             brushable.update(true, false);
 
             // 核心優化 3：視距守衛 (View Guard)，32 格內無任何在線玩家時不產生粒子與音效
-            if (!loc.getWorld().getNearbyPlayers(loc, 32).isEmpty()) {
+            if (loc.getWorld().getPlayerCount() > 0 && !loc.getWorld().getNearbyPlayers(loc, 32).isEmpty()) {
                 try {
                     loc.getWorld().spawnParticle(Particle.DUST, loc.clone().add(0.5, 0.5, 0.5), 10, 0.3, 0.3, 0.3, 0.05);
                     plugin.getConfigManager().playSound(null, "reset");
@@ -279,6 +302,9 @@ public class ResetManager {
                 }
             }
 
+            if (!plugin.getConfigManager().isLogEnabled("reset-executed")) {
+                return;
+            }
             String rolledDesc = clre20.customLootX.util.TextUtil.getItemDescription(rolled);
             String typeDesc = targetType == Material.SUSPICIOUS_SAND
                     ? plugin.getConfigManager().getText("items.configured.type-sand", "可疑沙")
@@ -297,7 +323,7 @@ public class ResetManager {
     }
 
     public boolean hasPendingReset(Location loc) {
-        if (loc == null) return false;
+        if (loc == null || pendingResets.isEmpty()) return false;
         return pendingResets.containsKey(toLocationKey(loc));
     }
 
@@ -359,14 +385,13 @@ public class ResetManager {
                 yaml.set("resets." + locKey + ".trigger-time", session.triggerTimeMillis);
             }
             try {
-                yaml.save(runtimeFile);
-            } catch (IOException ignored) {}
+                clre20.customLootX.util.AsyncIO.writeYamlAtomic(yaml, runtimeFile);
+            } catch (IOException e) {
+                dirty = true;
+                plugin.logWarn("&b[可疑方塊·持久化]&c 儲存待重置排程失敗: " + e.getMessage());
+            }
         };
 
-        if (sync || !plugin.isEnabled()) {
-            saveAction.run();
-        } else {
-            Bukkit.getScheduler().runTaskAsynchronously(plugin, saveAction);
-        }
+        clre20.customLootX.util.AsyncIO.run(saveAction, sync || !plugin.isEnabled());
     }
 }

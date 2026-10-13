@@ -4,6 +4,8 @@ import clre20.customLootX.CustomLootX;
 import clre20.customLootX.model.LootItem;
 import clre20.customLootX.model.VaultCooldownMode;
 import clre20.customLootX.model.VaultTemplate;
+import clre20.customLootX.util.AsyncIO;
+import clre20.customLootX.util.ChunkIndex;
 import clre20.customLootX.util.TextUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -44,9 +46,13 @@ public class VaultTemplateManager {
     private final Map<String, Location> locationCache = new ConcurrentHashMap<>();
     // 5. 正在開獎噴發戰利品中的寶庫：locationKey
     private final Set<String> ejectingVaults = ConcurrentHashMap.newKeySet();
+    // 區塊空間索引：區塊載入時 O(1) 找出該區塊內的自訂寶庫，取代逐一掃描所有已放置寶庫
+    private final ChunkIndex chunkIndex = new ChunkIndex();
     private BukkitTask tickerTask;
     private volatile boolean dirty = false;
     private int autoSaveCounter = 0;
+    // 最早一筆冷卻到期時間：尚未到期前心跳直接略過走訪
+    private volatile long nextExpiryMillis = 0L;
 
     public VaultTemplateManager(CustomLootX plugin) {
         this.plugin = plugin;
@@ -317,17 +323,19 @@ public class VaultTemplateManager {
             }
             case GLOBAL_COOLDOWN -> {
                 globalCooldowns.put(key, expireTime);
+                trackExpiry(expireTime);
             }
             case PLAYER_COOLDOWN -> {
                 playerCooldowns.computeIfAbsent(key, k -> new ConcurrentHashMap<>()).put(playerUuid, expireTime);
+                trackExpiry(expireTime);
                 if (plugin.getPlayerDataManager() != null) {
                     plugin.getPlayerDataManager().getPlayerData(playerUuid).setVaultCooldown(key, expireTime);
                     plugin.getPlayerDataManager().markDirty(playerUuid);
                 }
             }
         }
+        // 僅標記髒資料，由心跳計時器定期批次寫檔 (不再每次開鎖都複製全部資料並重寫整個檔案)
         dirty = true;
-        saveRuntimeData();
 
         // 立即同步至世界上原版 Vault TileState，避免冷卻中玩家靠近時觸發原版開啟樣式與音效
         Block block = loc.getBlock();
@@ -347,7 +355,6 @@ public class VaultTemplateManager {
         globalCooldowns.remove(key);
         rewardedPlayers.remove(key);
         dirty = true;
-        saveRuntimeData();
 
         Block block = loc.getBlock();
         if (block.getType() == Material.VAULT && block.getState() instanceof Vault vaultState) {
@@ -383,18 +390,36 @@ public class VaultTemplateManager {
         if (loc == null || templateName == null) return;
         String key = toLocationKey(loc);
         locationCache.put(key, loc.clone());
-        placedVaults.put(key, templateName);
-        dirty = true;
-        saveRuntimeData();
+        putPlaced(key, templateName);
     }
 
     public void unregisterVault(Location loc) {
         if (loc == null) return;
         String key = toLocationKey(loc);
         locationCache.remove(key);
-        placedVaults.remove(key);
-        dirty = true;
-        saveRuntimeData();
+        if (placedVaults.remove(key) != null) {
+            dirty = true;
+        }
+        chunkIndex.remove(key);
+    }
+
+    /**
+     * 登記已放置寶庫並同步區塊索引；內容未變更時不標記髒資料
+     */
+    private void putPlaced(String key, String templateName) {
+        String prev = placedVaults.put(key, templateName);
+        if (prev == null) {
+            chunkIndex.add(key);
+        }
+        if (!templateName.equals(prev)) {
+            dirty = true;
+        }
+    }
+
+    private void trackExpiry(long expireTime) {
+        if (expireTime < nextExpiryMillis) {
+            nextExpiryMillis = expireTime;
+        }
     }
 
     public Location parseLocation(String locKey) {
@@ -446,7 +471,7 @@ public class VaultTemplateManager {
 
         Location loc = block.getLocation();
         String locKey = toLocationKey(loc);
-        placedVaults.put(locKey, template.getName());
+        putPlaced(locKey, template.getName());
         long now = System.currentTimeMillis();
 
         boolean globalInCd = false;
@@ -459,12 +484,21 @@ public class VaultTemplateManager {
 
         // 1. 同步 BlockData (不祥屬性與冷卻外觀)
         if (block.getBlockData() instanceof org.bukkit.block.data.type.Vault vaultData) {
-            vaultData.setOminous(template.isOminous());
-            // 若在全域冷卻中，外觀強制維持關閉 (INACTIVE)；若在吐物品中維持 EJECTING
-            if (globalInCd && vaultData.getVaultState() != org.bukkit.block.data.type.Vault.State.EJECTING) {
-                vaultData.setVaultState(org.bukkit.block.data.type.Vault.State.INACTIVE);
+            boolean changed = false;
+            if (vaultData.isOminous() != template.isOminous()) {
+                vaultData.setOminous(template.isOminous());
+                changed = true;
             }
-            block.setBlockData(vaultData, true);
+            // 若在全域冷卻中，外觀強制維持關閉 (INACTIVE)；若在吐物品中維持 EJECTING
+            if (globalInCd && vaultData.getVaultState() != org.bukkit.block.data.type.Vault.State.EJECTING
+                    && vaultData.getVaultState() != org.bukkit.block.data.type.Vault.State.INACTIVE) {
+                vaultData.setVaultState(org.bukkit.block.data.type.Vault.State.INACTIVE);
+                changed = true;
+            }
+            // 僅在實際變更時寫入方塊，且不觸發相鄰物理更新
+            if (changed) {
+                block.setBlockData(vaultData, false);
+            }
         }
 
         // 2. 同步 TileState (原版鑰匙、感應半徑、冷卻名單)
@@ -510,25 +544,18 @@ public class VaultTemplateManager {
      * 當區塊載入時，同步區塊內已放置的自訂寶庫方塊
      */
     public void onChunkLoad(Chunk chunk) {
-        if (chunk == null) return;
-        int cx = chunk.getX();
-        int cz = chunk.getZ();
+        if (chunk == null || chunkIndex.isEmpty()) return;
         String worldName = chunk.getWorld().getName();
+        java.util.Set<String> keys = chunkIndex.get(worldName, chunk.getX(), chunk.getZ());
+        if (keys.isEmpty()) return;
 
-        for (Map.Entry<String, String> entry : placedVaults.entrySet()) {
-            String locKey = entry.getKey();
-            String[] parts = locKey.split(":");
-            if (parts.length == 4 && parts[0].equalsIgnoreCase(worldName)) {
-                try {
-                    int x = Integer.parseInt(parts[1]);
-                    int z = Integer.parseInt(parts[3]);
-                    if ((x >> 4) == cx && (z >> 4) == cz) {
-                        int y = Integer.parseInt(parts[2]);
-                        Block block = chunk.getWorld().getBlockAt(x, y, z);
-                        syncVaultBlock(block, entry.getValue());
-                    }
-                } catch (Exception ignored) {}
-            }
+        for (String locKey : keys.toArray(new String[0])) {
+            String templateName = placedVaults.get(locKey);
+            if (templateName == null) continue;
+            ChunkIndex.ParsedKey p = ChunkIndex.parse(locKey);
+            if (p == null) continue;
+            Block block = chunk.getWorld().getBlockAt(p.x(), p.y(), p.z());
+            syncVaultBlock(block, templateName);
         }
     }
 
@@ -554,6 +581,13 @@ public class VaultTemplateManager {
         long now = System.currentTimeMillis();
         boolean changed = false;
 
+        if (now < nextExpiryMillis) {
+            // 尚無任何冷卻到期：零走訪，只做定期存檔檢查
+            autoSave();
+            return;
+        }
+        long nextExpiry = Long.MAX_VALUE;
+
         // 1. 全域冷卻檢查
         Iterator<Map.Entry<String, Long>> gIt = globalCooldowns.entrySet().iterator();
         while (gIt.hasNext()) {
@@ -563,6 +597,8 @@ public class VaultTemplateManager {
                 gIt.remove();
                 changed = true;
                 handleGlobalCooldownExpired(locKey);
+            } else if (entry.getValue() < nextExpiry) {
+                nextExpiry = entry.getValue();
             }
         }
 
@@ -580,6 +616,8 @@ public class VaultTemplateManager {
                     expiredUuids.add(sub.getKey());
                     subIt.remove();
                     changed = true;
+                } else if (sub.getValue() < nextExpiry) {
+                    nextExpiry = sub.getValue();
                 }
             }
             if (!expiredUuids.isEmpty()) {
@@ -590,15 +628,20 @@ public class VaultTemplateManager {
             }
         }
 
+        // 所有變動皆在主執行緒，走訪結果即為最新的最早到期時間
+        nextExpiryMillis = nextExpiry;
+
         if (changed) {
             dirty = true;
         }
+        autoSave();
+    }
 
-        // 定期非同步存檔檢查 (每 60 秒且資料異動時才非同步寫入磁碟)
+    private void autoSave() {
+        // 定期存檔檢查 (預設每 30 秒且資料異動時才排入背景 I/O 佇列)
         autoSaveCounter++;
-        if (autoSaveCounter >= 60 && dirty) {
+        if (autoSaveCounter >= plugin.getConfigManager().getRuntimeSaveIntervalSeconds() && dirty) {
             autoSaveCounter = 0;
-            dirty = false;
             saveRuntimeData();
         }
     }
@@ -614,9 +657,10 @@ public class VaultTemplateManager {
         VaultTemplate template = getTemplate(templateName);
         if (template == null) return;
 
-        if (block.getBlockData() instanceof org.bukkit.block.data.type.Vault vaultData) {
+        if (block.getBlockData() instanceof org.bukkit.block.data.type.Vault vaultData
+                && vaultData.isOminous() != template.isOminous()) {
             vaultData.setOminous(template.isOminous());
-            block.setBlockData(vaultData, true);
+            block.setBlockData(vaultData, false);
         }
 
         if (block.getState() instanceof Vault vaultState) {
@@ -648,6 +692,7 @@ public class VaultTemplateManager {
     }
 
     public void saveRuntimeData(boolean sync) {
+        dirty = false;
         // 主執行緒僅採集記憶體快照，耗時 < 0.1ms，徹底消除 YamlConfiguration 節點樹建構之 CPU 與 GC 尖峰
         Map<String, Long> globalSnapshot = new HashMap<>(globalCooldowns);
         Map<String, Map<UUID, Long>> playerSnapshot = new HashMap<>();
@@ -693,15 +738,14 @@ public class VaultTemplateManager {
             }
 
             try {
-                yaml.save(runtimeFile);
-            } catch (IOException ignored) {}
+                AsyncIO.writeYamlAtomic(yaml, runtimeFile);
+            } catch (IOException e) {
+                dirty = true;
+                plugin.logWarn("&6[試煉寶庫·資料]&c 儲存試煉寶庫運行期資料失敗: " + e.getMessage());
+            }
         };
 
-        if (sync || !plugin.isEnabled()) {
-            saveTask.run();
-        } else {
-            Bukkit.getScheduler().runTaskAsynchronously(plugin, saveTask);
-        }
+        AsyncIO.run(saveTask, sync || !plugin.isEnabled());
     }
 
     public void loadRuntimeData() {
@@ -773,5 +817,11 @@ public class VaultTemplateManager {
         for (String locKey : rewardedPlayers.keySet()) {
             placedVaults.putIfAbsent(locKey, "");
         }
+
+        chunkIndex.clear();
+        for (String locKey : placedVaults.keySet()) {
+            chunkIndex.add(locKey);
+        }
+        nextExpiryMillis = 0L; // 下一次心跳重新計算
     }
 }

@@ -64,7 +64,33 @@ public class LootItem {
         return item != null ? item.clone() : null;
     }
 
+    /**
+     * 唯讀存取內部物品 (不複製)。僅供熱路徑比對/讀取使用，呼叫端不得修改回傳的物件。
+     */
+    public ItemStack peekItem() {
+        return item;
+    }
+
+    /**
+     * 與目標物品比對 (不建立複本)
+     */
+    public boolean isSimilarTo(ItemStack target) {
+        return item != null && target != null && item.isSimilar(target);
+    }
+
+    // 出貨上限識別鍵快取 (由 LootLimitManager 計算)；物品變更時自動失效
+    private transient volatile String cachedLimitKey;
+
+    public String getCachedLimitKey() {
+        return cachedLimitKey;
+    }
+
+    public void setCachedLimitKey(String key) {
+        this.cachedLimitKey = key;
+    }
+
     public void setItem(ItemStack item) {
+        this.cachedLimitKey = null;
         if (item == null || item.getType() == Material.AIR) {
             this.item = null;
             this.isAir = true;
@@ -87,6 +113,7 @@ public class LootItem {
     }
 
     public void setAir(boolean air) {
+        this.cachedLimitKey = null;
         this.isAir = air;
         if (air) {
             this.item = null;

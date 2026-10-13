@@ -33,9 +33,21 @@ public final class CustomLootX extends JavaPlugin {
         return instance;
     }
 
+    // 主控台日誌專用背景執行緒：Component 解析與輸出不占用主執行緒
+    private volatile java.util.concurrent.ExecutorService logExecutor;
+
     @Override
     public void onEnable() {
         instance = this;
+
+        // 啟動集中式背景 I/O 佇列 (所有資料檔寫入皆依序在此執行)
+        clre20.customLootX.util.AsyncIO.start(msg -> getLogger().warning(msg));
+        this.logExecutor = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "CustomLootX-Log");
+            t.setDaemon(true);
+            t.setPriority(Thread.MIN_PRIORITY);
+            return t;
+        });
 
         // Initialize managers
         this.configManager = new ConfigManager(this);
@@ -52,7 +64,7 @@ public final class CustomLootX extends JavaPlugin {
         this.playerInteractListener = new PlayerInteractListener(this);
 
         // 非同步啟動巡檢清理逾期草稿，避免開服主執行緒檔案 I/O 卡頓
-        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+        clre20.customLootX.util.AsyncIO.submit(() -> {
             int cleaned = this.draftManager.cleanExpiredDrafts();
             if (cleaned > 0) {
                 logConsole("&7[草稿·清理]&7 啟動巡檢已自動清除 &c" + cleaned + " &7個逾期草稿檔案。");
@@ -112,24 +124,61 @@ public final class CustomLootX extends JavaPlugin {
             playerDataManager.saveAll(true);
         }
         if (lootLimitManager != null) {
-            lootLimitManager.save();
+            lootLimitManager.save(true);
         }
+        // 等候背景佇列中所有存檔寫入完成
+        clre20.customLootX.util.AsyncIO.shutdown(15000L);
         logConsole("&c✘ CustomLootX 插件已關閉");
+        java.util.concurrent.ExecutorService ex = this.logExecutor;
+        this.logExecutor = null;
+        if (ex != null) {
+            ex.shutdown();
+            try {
+                ex.awaitTermination(3, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     /**
      * 輸出帶色彩與統一前綴的控制台訊息 (支援 MiniMessage 與 Legacy & 彩色碼)
      */
     public void logConsole(String message) {
-        org.bukkit.Bukkit.getConsoleSender().sendMessage(clre20.customLootX.util.TextUtil.parse("&8[&6CustomLootX&8] " + message));
+        emitConsole("&8[&6CustomLootX&8] " + message);
     }
 
     public void logWarn(String message) {
-        org.bukkit.Bukkit.getConsoleSender().sendMessage(clre20.customLootX.util.TextUtil.parse("&8[&6CustomLootX&8] &e[系統警告]&c " + message));
+        emitConsole("&8[&6CustomLootX&8] &e[系統警告]&c " + message);
     }
 
     public void logError(String message) {
-        org.bukkit.Bukkit.getConsoleSender().sendMessage(clre20.customLootX.util.TextUtil.parse("&8[&6CustomLootX&8] &4[嚴重錯誤]&c " + message));
+        emitConsole("&8[&6CustomLootX&8] &4[嚴重錯誤]&c " + message);
+    }
+
+    /**
+     * 輸出主控台訊息：預設交由背景執行緒解析彩色碼並輸出 (主控台寫入為執行緒安全)，
+     * 大量開獎/重置日誌不再占用主執行緒 tick 時間；可於 config.yml performance.async-console-log 關閉。
+     */
+    private void emitConsole(String raw) {
+        java.util.concurrent.ExecutorService ex = this.logExecutor;
+        boolean async = ex != null && !ex.isShutdown()
+                && (configManager == null || configManager.isAsyncConsoleLog());
+        if (async) {
+            try {
+                ex.execute(() -> sendToConsole(raw));
+                return;
+            } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            }
+        }
+        sendToConsole(raw);
+    }
+
+    private static void sendToConsole(String raw) {
+        try {
+            org.bukkit.Bukkit.getConsoleSender().sendMessage(clre20.customLootX.util.TextUtil.parse(raw));
+        } catch (Throwable ignored) {
+        }
     }
 
     public ConfigManager getConfigManager() {

@@ -136,12 +136,18 @@ public class BlockEventListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Block block = event.getBlock();
+        Material type = block.getType();
         Location loc = block.getLocation();
-        String locKey = toLocationKey(loc);
 
-        // Immediately cancel any pending reset session at this location when broken
+        // Immediately cancel any pending reset session at this location when broken (內部有空集合快速返回)
         plugin.getResetManager().cancelReset(loc);
+
+        // 熱路徑快速過濾：伺服器上每一次挖掘都會觸發，非可疑方塊直接返回，不建立 BlockState 與字串鍵
+        if (type != Material.SUSPICIOUS_SAND && type != Material.SUSPICIOUS_GRAVEL) {
+            return;
+        }
         plugin.getPlayerInteractListener().removeLastBrushedFace(loc);
+        String locKey = toLocationKey(loc);
 
         if (block.getState(false) instanceof BrushableBlock brushable) {
             PersistentDataContainer pdc = brushable.getPersistentDataContainer();

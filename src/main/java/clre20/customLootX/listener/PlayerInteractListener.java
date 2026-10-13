@@ -45,19 +45,41 @@ public class PlayerInteractListener implements Listener {
     private final Map<String, BrushingEntry> activeBrushingEntries = new ConcurrentHashMap<>();
     private org.bukkit.scheduler.BukkitTask brushingTickerTask;
     private final Map<String, BlockFace> lastBrushedFace = new ConcurrentHashMap<>();
+    // 記錄刷洗面寫入時間，用於清理玩家中途放棄刷洗而遺留的紀錄 (避免長時間運行後記憶體持續累積)
+    private final Map<String, Long> lastBrushedAt = new ConcurrentHashMap<>();
+    private static final int FACE_CLEANUP_THRESHOLD = 512;
+    private static final long FACE_STALE_MILLIS = 60_000L;
 
     public PlayerInteractListener(CustomLootX plugin) {
         this.plugin = plugin;
     }
 
     public BlockFace getLastBrushedFace(Location loc) {
-        if (loc == null) return null;
+        if (loc == null || lastBrushedFace.isEmpty()) return null;
         return lastBrushedFace.get(toLocationKey(loc));
     }
 
     public void removeLastBrushedFace(Location loc) {
-        if (loc == null) return;
-        lastBrushedFace.remove(toLocationKey(loc));
+        if (loc == null || lastBrushedFace.isEmpty()) return;
+        String key = toLocationKey(loc);
+        lastBrushedFace.remove(key);
+        lastBrushedAt.remove(key);
+    }
+
+    private void recordBrushedFace(Location loc, BlockFace face) {
+        String key = toLocationKey(loc);
+        long now = System.currentTimeMillis();
+        lastBrushedFace.put(key, face);
+        lastBrushedAt.put(key, now);
+        if (lastBrushedFace.size() > FACE_CLEANUP_THRESHOLD) {
+            lastBrushedAt.entrySet().removeIf(e -> {
+                if (now - e.getValue() > FACE_STALE_MILLIS) {
+                    lastBrushedFace.remove(e.getKey());
+                    return true;
+                }
+                return false;
+            });
+        }
     }
 
     private String toLocationKey(Location loc) {
@@ -122,7 +144,9 @@ public class PlayerInteractListener implements Listener {
         // 2. Interacting with placed block in world
         if (action == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
             Block block = event.getClickedBlock();
-            if (block.getType() == Material.SUSPICIOUS_SAND || block.getType() == Material.SUSPICIOUS_GRAVEL) {
+            Material clickedType = block.getType();
+            if ((clickedType == Material.SUSPICIOUS_SAND || clickedType == Material.SUSPICIOUS_GRAVEL)
+                    && player.getInventory().getItemInMainHand().getType() == Material.BRUSH) {
                 if (block.getState(false) instanceof BrushableBlock brushable) {
                     PersistentDataContainer pdc = brushable.getPersistentDataContainer();
                     if (pdc.has(plugin.getItemManager().KEY_CUSTOM_LOOT, PersistentDataType.BYTE)) {
@@ -136,7 +160,7 @@ public class PlayerInteractListener implements Listener {
 
                         // Holding a brush: record face and track brushing completion for reset
                         BlockFace face = event.getBlockFace();
-                        lastBrushedFace.put(toLocationKey(block.getLocation()), face);
+                        recordBrushedFace(block.getLocation(), face);
 
                         if (templateName != null && !templateName.isEmpty()) {
                             trackBrushing(block.getLocation(), templateName);

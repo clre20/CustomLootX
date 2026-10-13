@@ -18,7 +18,7 @@ public class GuiManager implements Listener {
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
+        InventoryHolder holder = event.getInventory().getHolder(false);
         if (holder instanceof CustomGuiHolder gui) {
             gui.handleClick(event);
         }
@@ -26,7 +26,7 @@ public class GuiManager implements Listener {
 
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
+        InventoryHolder holder = event.getInventory().getHolder(false);
         if (holder instanceof CustomGuiHolder gui) {
             gui.handleDrag(event);
         }
@@ -34,7 +34,7 @@ public class GuiManager implements Listener {
 
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
+        InventoryHolder holder = event.getInventory().getHolder(false);
         if (holder instanceof CustomGuiHolder gui) {
             gui.handleClose(event);
         }

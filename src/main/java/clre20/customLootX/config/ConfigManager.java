@@ -20,6 +20,13 @@ public class ConfigManager {
     private String prefix;
     private final Map<String, Sound> sounds = new HashMap<>();
     private final Map<String, String> defaultFallbacks = new HashMap<>();
+    // 日誌格式快取 (logKey -> pattern；空字串代表已停用)，避免每次寫日誌都查詢 YAML 節點樹
+    private final Map<String, String> logCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private volatile boolean asyncConsoleLog = true;
+    private volatile boolean verboseLimitLogs = false;
+    private volatile int playerDailyRetentionDays = 7;
+    private volatile int runtimeSaveIntervalSeconds = 30;
 
     public ConfigManager(CustomLootX plugin) {
         this.plugin = plugin;
@@ -110,6 +117,13 @@ public class ConfigManager {
         }
 
         this.prefix = config.getString("prefix", "&8[&6CustomLootX&8] &r");
+
+        // 效能設定 (快取為欄位，供熱路徑與背景執行緒無鎖讀取)
+        this.asyncConsoleLog = config.getBoolean("performance.async-console-log", true);
+        this.verboseLimitLogs = config.getBoolean("performance.verbose-limit-logs", false);
+        this.playerDailyRetentionDays = Math.max(1, config.getInt("performance.player-daily-retention-days", 7));
+        this.runtimeSaveIntervalSeconds = Math.max(5, config.getInt("performance.runtime-save-interval-seconds", 30));
+        this.logCache.clear();
 
         sounds.clear();
         if (config.isConfigurationSection("sound")) {
@@ -215,22 +229,54 @@ public class ConfigManager {
         return result;
     }
 
-    public void log(String logKey, Object... placeholders) {
+    public boolean isAsyncConsoleLog() {
+        return asyncConsoleLog;
+    }
+
+    public boolean isVerboseLimitLogs() {
+        return verboseLimitLogs;
+    }
+
+    public int getPlayerDailyRetentionDays() {
+        return playerDailyRetentionDays;
+    }
+
+    public int getRuntimeSaveIntervalSeconds() {
+        return runtimeSaveIntervalSeconds;
+    }
+
+    /**
+     * 指定日誌是否啟用 (未設定或空字串即視為停用)。呼叫端可先檢查，避免為停用的日誌組裝昂貴的參數
+     */
+    public boolean isLogEnabled(String logKey) {
+        return !resolveLogPattern(logKey).isEmpty();
+    }
+
+    private String resolveLogPattern(String logKey) {
+        String cached = logCache.get(logKey);
+        if (cached != null) return cached;
+
         String pattern = config.getString("logs." + logKey);
         if (pattern == null && defaultConfig != null) {
             pattern = defaultConfig.getString("logs." + logKey);
         }
         if (pattern == null || pattern.trim().isEmpty()) {
-            return;
-        }
-
-        // 自動向後相容：若現存 config.yml 的開獎日誌未包含戰利品佔位符，自動附加開出物品清單
-        if ("vault-unlock".equals(logKey) || "spawner-loot".equals(logKey)) {
+            pattern = "";
+        } else if ("vault-unlock".equals(logKey) || "spawner-loot".equals(logKey)) {
+            // 自動向後相容：若現存 config.yml 的開獎日誌未包含戰利品佔位符，自動附加開出物品清單
             if (!pattern.contains("%items%") && !pattern.contains("%item_names%") && !pattern.contains("%item%")) {
                 pattern = pattern + ": &e%items%";
             }
         }
+        logCache.put(logKey, pattern);
+        return pattern;
+    }
 
+    public void log(String logKey, Object... placeholders) {
+        String pattern = resolveLogPattern(logKey);
+        if (pattern.isEmpty()) {
+            return;
+        }
         String msg = replace(pattern, placeholders);
         plugin.logConsole(msg);
     }

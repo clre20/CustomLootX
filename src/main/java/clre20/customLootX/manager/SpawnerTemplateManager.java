@@ -5,6 +5,8 @@ import clre20.customLootX.model.LootItem;
 import clre20.customLootX.model.SpawnerMobEntry;
 import clre20.customLootX.model.SpawnerTemplate;
 import clre20.customLootX.model.VaultCooldownMode;
+import clre20.customLootX.util.AsyncIO;
+import clre20.customLootX.util.ChunkIndex;
 import clre20.customLootX.util.TextUtil;
 import clre20.customLootX.util.TrialSpawnerNmsUtil;
 import org.bukkit.Bukkit;
@@ -48,8 +50,8 @@ public class SpawnerTemplateManager {
     private final Map<String, Set<UUID>> rewardedPlayers = new ConcurrentHashMap<>();
     // 4. 已放置生怪磚追蹤：locationKey -> templateName
     private final Map<String, String> placedSpawners = new ConcurrentHashMap<>();
-    // 區塊空間索引：chunkKey ("world:cx:cz") -> Set<locationKey>
-    private final Map<String, Set<String>> chunkToSpawners = new ConcurrentHashMap<>();
+    // 區塊空間索引：world -> (long chunkKey -> Set<locationKey>)，查詢零字串配置
+    private final ChunkIndex chunkIndex = new ChunkIndex();
     // 快取各生怪磚目前展示之生物類型，避免無變更時重複發送 NMS 反射更新與封包
     private final Map<String, EntityType> lastPreviewMob = new ConcurrentHashMap<>();
     // 快取解析後的 Location，避免每秒心跳重複分割字串與配置 Location 物件
@@ -61,10 +63,8 @@ public class SpawnerTemplateManager {
     private int previewRotationTick = 0;
     private int autoSaveCounter = 0;
     private volatile boolean dirty = false;
-
-    private String toChunkKey(String world, int cx, int cz) {
-        return world + ":" + cx + ":" + cz;
-    }
+    // 最早一筆冷卻到期時間：尚未到期前心跳直接略過走訪
+    private volatile long nextExpiryMillis = 0L;
 
     public SpawnerTemplateManager(CustomLootX plugin) {
         this.plugin = plugin;
@@ -504,8 +504,10 @@ public class SpawnerTemplateManager {
             }
             case GLOBAL_COOLDOWN -> {
                 globalCooldowns.put(key, expireTime);
+                trackExpiry(expireTime);
             }
             case PLAYER_COOLDOWN -> {
+                trackExpiry(expireTime);
                 Map<UUID, Long> map = playerCooldowns.computeIfAbsent(key, k -> new ConcurrentHashMap<>());
                 for (UUID uuid : playerUuids) {
                     map.put(uuid, expireTime);
@@ -518,7 +520,14 @@ public class SpawnerTemplateManager {
                 }
             }
         }
-        saveRuntimeData();
+        // 僅標記髒資料，由心跳計時器定期批次寫檔
+        dirty = true;
+    }
+
+    private void trackExpiry(long expireTime) {
+        if (expireTime < nextExpiryMillis) {
+            nextExpiryMillis = expireTime;
+        }
     }
 
     public void clearCooldown(Location loc) {
@@ -527,7 +536,7 @@ public class SpawnerTemplateManager {
         playerCooldowns.remove(key);
         globalCooldowns.remove(key);
         rewardedPlayers.remove(key);
-        saveRuntimeData();
+        dirty = true;
     }
 
     // ==========================================
@@ -537,14 +546,20 @@ public class SpawnerTemplateManager {
     public void registerSpawner(Location loc, String templateName) {
         if (loc == null || templateName == null) return;
         String key = toLocationKey(loc);
+        // 已登記且模板相同 (例如玩家每次右鍵點擊) 時直接返回，不再觸發存檔
+        if (templateName.equals(placedSpawners.get(key))) return;
         locationCache.put(key, loc.clone());
-        placedSpawners.put(key, templateName);
-        if (loc.getWorld() != null) {
-            String chunkKey = toChunkKey(loc.getWorld().getName(), loc.getBlockX() >> 4, loc.getBlockZ() >> 4);
-            chunkToSpawners.computeIfAbsent(chunkKey, k -> ConcurrentHashMap.newKeySet()).add(key);
+        putPlaced(key, templateName);
+    }
+
+    private void putPlaced(String key, String templateName) {
+        String prev = placedSpawners.put(key, templateName);
+        if (prev == null) {
+            chunkIndex.add(key);
         }
-        dirty = true;
-        saveRuntimeData();
+        if (!templateName.equals(prev)) {
+            dirty = true;
+        }
     }
 
     public void unregisterSpawner(Location loc) {
@@ -554,18 +569,8 @@ public class SpawnerTemplateManager {
         lastPreviewMob.remove(key);
         cancelBattleSession(key);
         placedSpawners.remove(key);
-        if (loc.getWorld() != null) {
-            String chunkKey = toChunkKey(loc.getWorld().getName(), loc.getBlockX() >> 4, loc.getBlockZ() >> 4);
-            Set<String> set = chunkToSpawners.get(chunkKey);
-            if (set != null) {
-                set.remove(key);
-                if (set.isEmpty()) {
-                    chunkToSpawners.remove(chunkKey);
-                }
-            }
-        }
+        chunkIndex.remove(key);
         dirty = true;
-        saveRuntimeData();
     }
 
     public Map<String, String> getPlacedSpawners() {
@@ -621,7 +626,7 @@ public class SpawnerTemplateManager {
 
         Location loc = block.getLocation();
         String locKey = toLocationKey(loc);
-        placedSpawners.put(locKey, template.getName());
+        putPlaced(locKey, template.getName());
 
         boolean inCooldown = isSpawnerInCooldown(locKey, template);
         long cdSeconds = getRemainingCooldownSeconds(locKey, template);
@@ -629,15 +634,16 @@ public class SpawnerTemplateManager {
 
         // 1. 同步 BlockData (不祥狀態與視覺狀態)
         if (block.getBlockData() instanceof org.bukkit.block.data.type.TrialSpawner spawnerData) {
-            spawnerData.setOminous(template.isOminous());
-            if (inBattle) {
-                spawnerData.setTrialSpawnerState(org.bukkit.block.data.type.TrialSpawner.State.ACTIVE);
-            } else if (inCooldown) {
-                spawnerData.setTrialSpawnerState(org.bukkit.block.data.type.TrialSpawner.State.COOLDOWN);
-            } else {
-                spawnerData.setTrialSpawnerState(org.bukkit.block.data.type.TrialSpawner.State.WAITING_FOR_PLAYERS);
+            org.bukkit.block.data.type.TrialSpawner.State expected = inBattle
+                    ? org.bukkit.block.data.type.TrialSpawner.State.ACTIVE
+                    : (inCooldown ? org.bukkit.block.data.type.TrialSpawner.State.COOLDOWN
+                    : org.bukkit.block.data.type.TrialSpawner.State.WAITING_FOR_PLAYERS);
+            // 僅在實際變更時寫入方塊，且不觸發相鄰物理更新
+            if (spawnerData.isOminous() != template.isOminous() || spawnerData.getTrialSpawnerState() != expected) {
+                spawnerData.setOminous(template.isOminous());
+                spawnerData.setTrialSpawnerState(expected);
+                block.setBlockData(spawnerData, false);
             }
-            block.setBlockData(spawnerData, true);
         }
 
         // 2. 同步 TileState (3D 旋轉實體預覽模型、感應範圍、冷卻時間與 PDC)
@@ -689,15 +695,11 @@ public class SpawnerTemplateManager {
      * 當區塊載入時，同步區塊內已放置的自訂生怪磚方塊
      */
     public void onChunkLoad(Chunk chunk) {
-        if (chunk == null) return;
-        int cx = chunk.getX();
-        int cz = chunk.getZ();
-        String worldName = chunk.getWorld().getName();
-        String chunkKey = toChunkKey(worldName, cx, cz);
-        Set<String> spawnersInChunk = chunkToSpawners.get(chunkKey);
-        if (spawnersInChunk == null || spawnersInChunk.isEmpty()) return;
+        if (chunk == null || chunkIndex.isEmpty()) return;
+        Set<String> spawnersInChunk = chunkIndex.get(chunk.getWorld().getName(), chunk.getX(), chunk.getZ());
+        if (spawnersInChunk.isEmpty()) return;
 
-        for (String locKey : spawnersInChunk) {
+        for (String locKey : spawnersInChunk.toArray(new String[0])) {
             String templateName = placedSpawners.get(locKey);
             if (templateName == null) continue;
             Location loc = parseLocation(locKey);
@@ -771,29 +773,37 @@ public class SpawnerTemplateManager {
     }
 
     private Set<String> getActiveNearbySpawnerKeys() {
-        Set<String> activeKeys = new HashSet<>();
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.isDead() || !player.isValid()) continue;
-            GameMode gm = player.getGameMode();
-            if (gm != GameMode.SURVIVAL && gm != GameMode.ADVENTURE) continue;
-            Location pLoc = player.getLocation();
-            World world = pLoc.getWorld();
-            if (world == null) continue;
-            int cx = pLoc.getBlockX() >> 4;
-            int cz = pLoc.getBlockZ() >> 4;
+        // 全服沒有任何自訂生怪磚時，完全不走訪線上玩家
+        if (chunkIndex.isEmpty()) return Collections.emptySet();
+        Set<String> activeKeys = null;
+        for (World world : Bukkit.getWorlds()) {
             String wName = world.getName();
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    String chunkKey = toChunkKey(wName, cx + dx, cz + dz);
-                    Set<String> spawnersInChunk = chunkToSpawners.get(chunkKey);
-                    if (spawnersInChunk != null && !spawnersInChunk.isEmpty()) {
-                        activeKeys.addAll(spawnersInChunk);
+            // 只處理有放置生怪磚的世界，且以世界內玩家清單取代全服玩家走訪
+            if (!chunkIndex.hasWorld(wName) || world.getPlayerCount() == 0) continue;
+            for (Player player : world.getPlayers()) {
+                GameMode gm = player.getGameMode();
+                if (gm != GameMode.SURVIVAL && gm != GameMode.ADVENTURE) continue;
+                if (player.isDead() || !player.isValid()) continue;
+                // 直接讀取方塊座標，避免 getLocation() 每次配置新的 Location 物件
+                int cx = player.getLocation(REUSABLE_LOCATION).getBlockX() >> 4;
+                int cz = REUSABLE_LOCATION.getBlockZ() >> 4;
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        Set<String> spawnersInChunk = chunkIndex.get(wName, cx + dx, cz + dz);
+                        if (!spawnersInChunk.isEmpty()) {
+                            if (activeKeys == null) activeKeys = new HashSet<>();
+                            activeKeys.addAll(spawnersInChunk);
+                        }
                     }
                 }
             }
         }
-        return activeKeys;
+        REUSABLE_LOCATION.setWorld(null); // 不持有世界參考，避免世界卸載後無法回收
+        return activeKeys != null ? activeKeys : Collections.emptySet();
     }
+
+    // 僅於主執行緒使用的可重用 Location (避免每位玩家每秒配置新物件)
+    private final Location REUSABLE_LOCATION = new Location(null, 0, 0, 0);
 
     public void tickAll() {
         // 1. 心跳檢測所有進行中的戰鬥進程
@@ -821,11 +831,10 @@ public class SpawnerTemplateManager {
         // 6. 檢測並更新冷卻到期狀態 (基於時間戳，無須遍歷所有方塊)
         tickCooldowns();
 
-        // 7. 定期非同步存檔檢查 (每 60 秒且資料異動時才非同步寫入磁碟)
+        // 7. 定期存檔檢查 (預設每 30 秒且資料異動時才排入背景 I/O 佇列)
         autoSaveCounter++;
-        if (autoSaveCounter >= 60 && dirty) {
+        if (autoSaveCounter >= plugin.getConfigManager().getRuntimeSaveIntervalSeconds() && dirty) {
             autoSaveCounter = 0;
-            dirty = false;
             saveRuntimeData();
         }
     }
@@ -869,7 +878,7 @@ public class SpawnerTemplateManager {
                 }
 
                 if (dataChanged) {
-                    block.setBlockData(data, true);
+                    block.setBlockData(data, false);
                 }
 
                 // 核心防護 2：TileState 不祥屬性、冷卻時間與清空原版追蹤玩家 (防止靠近偽觸發)
@@ -1003,7 +1012,11 @@ public class SpawnerTemplateManager {
 
     public void tickCooldowns() {
         long now = System.currentTimeMillis();
+        if (now < nextExpiryMillis) {
+            return; // 尚無任何冷卻到期：零走訪
+        }
         boolean changed = false;
+        long nextExpiry = Long.MAX_VALUE;
 
         // 1. 全域冷卻檢查
         Iterator<Map.Entry<String, Long>> gIt = globalCooldowns.entrySet().iterator();
@@ -1014,6 +1027,8 @@ public class SpawnerTemplateManager {
                 gIt.remove();
                 changed = true;
                 handleCooldownExpired(locKey);
+            } else if (entry.getValue() < nextExpiry) {
+                nextExpiry = entry.getValue();
             }
         }
 
@@ -1026,10 +1041,13 @@ public class SpawnerTemplateManager {
             boolean anyExpired = false;
             Iterator<Map.Entry<UUID, Long>> subIt = map.entrySet().iterator();
             while (subIt.hasNext()) {
-                if (subIt.next().getValue() <= now) {
+                long exp = subIt.next().getValue();
+                if (exp <= now) {
                     subIt.remove();
                     anyExpired = true;
                     changed = true;
+                } else if (exp < nextExpiry) {
+                    nextExpiry = exp;
                 }
             }
             if (anyExpired && !activeBattles.containsKey(locKey)) {
@@ -1040,6 +1058,7 @@ public class SpawnerTemplateManager {
             }
         }
 
+        nextExpiryMillis = nextExpiry;
         if (changed) {
             dirty = true;
         }
@@ -1062,7 +1081,7 @@ public class SpawnerTemplateManager {
         if (block.getBlockData() instanceof org.bukkit.block.data.type.TrialSpawner spawnerData) {
             spawnerData.setOminous(template.isOminous());
             spawnerData.setTrialSpawnerState(org.bukkit.block.data.type.TrialSpawner.State.WAITING_FOR_PLAYERS);
-            block.setBlockData(spawnerData, true);
+            block.setBlockData(spawnerData, false);
         }
 
         if (block.getState() instanceof TrialSpawner tsState) {
@@ -1075,6 +1094,7 @@ public class SpawnerTemplateManager {
         }
 
         World world = loc.getWorld();
+        if (world.getPlayerCount() == 0) return;
         Sound sound = template.isOminous() ? Sound.BLOCK_TRIAL_SPAWNER_AMBIENT_OMINOUS : Sound.BLOCK_TRIAL_SPAWNER_AMBIENT;
         world.playSound(loc, sound, 1.0f, 1.0f);
 
@@ -1092,21 +1112,14 @@ public class SpawnerTemplateManager {
 
         // 載入已放置生怪磚
         placedSpawners.clear();
-        chunkToSpawners.clear();
+        chunkIndex.clear();
+        nextExpiryMillis = 0L;
         if (yaml.isConfigurationSection("placed")) {
             for (String key : yaml.getConfigurationSection("placed").getKeys(false)) {
                 String val = yaml.getString("placed." + key);
                 if (val != null) {
                     placedSpawners.put(key, val);
-                    String[] parts = key.split(":");
-                    if (parts.length == 4) {
-                        try {
-                            int x = Integer.parseInt(parts[1]);
-                            int z = Integer.parseInt(parts[3]);
-                            String chunkKey = toChunkKey(parts[0], x >> 4, z >> 4);
-                            chunkToSpawners.computeIfAbsent(chunkKey, k -> ConcurrentHashMap.newKeySet()).add(key);
-                        } catch (Exception ignored) {}
-                    }
+                    chunkIndex.add(key);
                 }
             }
         }
@@ -1165,6 +1178,7 @@ public class SpawnerTemplateManager {
     }
 
     public void saveRuntimeData(boolean sync) {
+        dirty = false;
         // 主執行緒僅採集記憶體快照，耗時 < 0.1ms，徹底消除 YamlConfiguration 節點樹建構之 CPU 與 GC 尖峰
         Map<String, String> placedSnapshot = new HashMap<>(placedSpawners);
         Map<String, Long> globalSnapshot = new HashMap<>(globalCooldowns);
@@ -1212,16 +1226,13 @@ public class SpawnerTemplateManager {
             }
 
             try {
-                yaml.save(runtimeFile);
+                AsyncIO.writeYamlAtomic(yaml, runtimeFile);
             } catch (IOException e) {
+                dirty = true;
                 plugin.logWarn("&5[試煉生怪磚·資料]&c 儲存試煉生怪磚運行期資料失敗: " + e.getMessage());
             }
         };
 
-        if (sync || !plugin.isEnabled()) {
-            saveTask.run();
-        } else {
-            Bukkit.getScheduler().runTaskAsynchronously(plugin, saveTask);
-        }
+        AsyncIO.run(saveTask, sync || !plugin.isEnabled());
     }
 }

@@ -202,10 +202,8 @@ public class ItemManager {
             return false;
         }
         if (!item.hasItemMeta()) return false;
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return false;
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        return pdc.has(KEY_CUSTOM_LOOT, PersistentDataType.BYTE);
+        // Paper 唯讀 PDC 檢視：不複製整個 ItemMeta，熱路徑 (每次互動/放置) 成本大幅降低
+        return item.getPersistentDataContainer().has(KEY_CUSTOM_LOOT, PersistentDataType.BYTE);
     }
 
     public boolean isBlankCustomItem(ItemStack item) {
@@ -215,11 +213,8 @@ public class ItemManager {
     }
 
     public String getTemplateName(ItemStack item) {
-        if (item == null || item.getType() == Material.AIR) return null;
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return null;
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        return pdc.get(KEY_TEMPLATE_NAME, PersistentDataType.STRING);
+        if (item == null || item.getType() == Material.AIR || !item.hasItemMeta()) return null;
+        return item.getPersistentDataContainer().get(KEY_TEMPLATE_NAME, PersistentDataType.STRING);
     }
 
     /**
@@ -401,17 +396,17 @@ public class ItemManager {
         if (item == null || item.getType() != Material.VAULT || !item.hasItemMeta()) {
             return false;
         }
-        return item.getItemMeta().getPersistentDataContainer().has(KEY_CUSTOM_VAULT, PersistentDataType.BYTE);
+        return item.getPersistentDataContainer().has(KEY_CUSTOM_VAULT, PersistentDataType.BYTE);
     }
 
     public boolean isBlankVaultItem(ItemStack item) {
         if (!isCustomVaultItem(item)) return false;
-        return item.getItemMeta().getPersistentDataContainer().has(KEY_IS_BLANK_VAULT, PersistentDataType.BYTE);
+        return item.getPersistentDataContainer().has(KEY_IS_BLANK_VAULT, PersistentDataType.BYTE);
     }
 
     public String getVaultTemplateName(ItemStack item) {
         if (!isCustomVaultItem(item)) return null;
-        return item.getItemMeta().getPersistentDataContainer().get(KEY_VAULT_TEMPLATE_NAME, PersistentDataType.STRING);
+        return item.getPersistentDataContainer().get(KEY_VAULT_TEMPLATE_NAME, PersistentDataType.STRING);
     }
 
     /**
@@ -702,17 +697,17 @@ public class ItemManager {
         if (item == null || item.getType() != Material.TRIAL_SPAWNER || !item.hasItemMeta()) {
             return false;
         }
-        return item.getItemMeta().getPersistentDataContainer().has(KEY_CUSTOM_SPAWNER, PersistentDataType.BYTE);
+        return item.getPersistentDataContainer().has(KEY_CUSTOM_SPAWNER, PersistentDataType.BYTE);
     }
 
     public boolean isBlankSpawnerItem(ItemStack item) {
         if (!isCustomSpawnerItem(item)) return false;
-        return item.getItemMeta().getPersistentDataContainer().has(KEY_IS_BLANK_SPAWNER, PersistentDataType.BYTE);
+        return item.getPersistentDataContainer().has(KEY_IS_BLANK_SPAWNER, PersistentDataType.BYTE);
     }
 
     public String getSpawnerTemplateName(ItemStack item) {
         if (!isCustomSpawnerItem(item)) return null;
-        return item.getItemMeta().getPersistentDataContainer().get(KEY_SPAWNER_TEMPLATE_NAME, PersistentDataType.STRING);
+        return item.getPersistentDataContainer().get(KEY_SPAWNER_TEMPLATE_NAME, PersistentDataType.STRING);
     }
 
     public void updatePlayerHeldSpawnerItem(Player player, SpawnerTemplate template) {
@@ -761,29 +756,29 @@ public class ItemManager {
             return false;
         }
         if (!item.hasItemMeta()) return false;
-        return item.getItemMeta().getPersistentDataContainer().has(KEY_IS_DRAFT, PersistentDataType.BYTE);
+        return item.getPersistentDataContainer().has(KEY_IS_DRAFT, PersistentDataType.BYTE);
     }
 
     public String getDraftId(ItemStack item) {
         if (!isDraftItem(item)) return null;
-        return item.getItemMeta().getPersistentDataContainer().get(KEY_DRAFT_ID, PersistentDataType.STRING);
+        return item.getPersistentDataContainer().get(KEY_DRAFT_ID, PersistentDataType.STRING);
     }
 
     public clre20.customLootX.model.DraftType getDraftType(ItemStack item) {
         if (!isDraftItem(item)) return null;
-        String typeStr = item.getItemMeta().getPersistentDataContainer().get(KEY_DRAFT_TYPE, PersistentDataType.STRING);
+        String typeStr = item.getPersistentDataContainer().get(KEY_DRAFT_TYPE, PersistentDataType.STRING);
         return clre20.customLootX.model.DraftType.fromString(typeStr);
     }
 
     public long getDraftExpireTime(ItemStack item) {
         if (!isDraftItem(item)) return 0;
-        Long expire = item.getItemMeta().getPersistentDataContainer().get(KEY_DRAFT_EXPIRE, PersistentDataType.LONG);
+        Long expire = item.getPersistentDataContainer().get(KEY_DRAFT_EXPIRE, PersistentDataType.LONG);
         return expire != null ? expire : 0;
     }
 
     public String getDraftOriginalName(ItemStack item) {
         if (!isDraftItem(item)) return null;
-        return item.getItemMeta().getPersistentDataContainer().get(KEY_DRAFT_ORIGINAL_NAME, PersistentDataType.STRING);
+        return item.getPersistentDataContainer().get(KEY_DRAFT_ORIGINAL_NAME, PersistentDataType.STRING);
     }
 
     public boolean isDraftExpired(ItemStack item) {
@@ -794,9 +789,7 @@ public class ItemManager {
 
     public boolean isDraftMarkedExpired(ItemStack item) {
         if (!isDraftItem(item)) return false;
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return false;
-        return meta.getPersistentDataContainer().has(KEY_DRAFT_IS_EXPIRED, PersistentDataType.BYTE);
+        return item.getPersistentDataContainer().has(KEY_DRAFT_IS_EXPIRED, PersistentDataType.BYTE);
     }
 
     /**

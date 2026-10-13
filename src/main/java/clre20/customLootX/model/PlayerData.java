@@ -18,8 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PlayerData {
 
     private final UUID uuid;
-    private String name;
-    private long lastSeen;
+    private volatile String name;
+    private volatile long lastSeen;
 
     // 寶庫開啟記錄 (方塊座標 key -> 記錄)
     private final Set<String> openedVaults = ConcurrentHashMap.newKeySet();
@@ -350,6 +350,26 @@ public class PlayerData {
             this.dirty = true;
         }
         return removed;
+    }
+
+    /**
+     * 移除早於指定日期 (ISO yyyy-MM-dd，可直接字串比較) 的每日出貨紀錄，不標記髒資料
+     */
+    public void pruneDailyBefore(String oldestKeptDate) {
+        if (oldestKeptDate == null || lootDailyCounts.isEmpty()) return;
+        lootDailyCounts.keySet().removeIf(d -> d.compareTo(oldestKeptDate) < 0);
+    }
+
+    /**
+     * 移除已過期的冷卻紀錄以回收記憶體 (存檔時本來就會略過)，不標記髒資料
+     */
+    public void pruneExpiredCooldowns(long now) {
+        if (!vaultCooldowns.isEmpty()) {
+            vaultCooldowns.values().removeIf(exp -> exp <= now);
+        }
+        if (!spawnerCooldowns.isEmpty()) {
+            spawnerCooldowns.values().removeIf(exp -> exp <= now);
+        }
     }
 
     public void resetAllLimits() {

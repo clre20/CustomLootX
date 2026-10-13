@@ -137,7 +137,8 @@ public class VaultBlockListener implements Listener {
         Block block = event.getBlock();
         if (block.getType() != Material.VAULT) return;
 
-        if (block.getState() instanceof Vault vaultState) {
+        // 唯讀檢查使用 getState(false)，避免完整複製 TileState/NBT 快照
+        if (block.getState(false) instanceof Vault vaultState) {
             PersistentDataContainer pdc = vaultState.getPersistentDataContainer();
             if (pdc.has(plugin.getItemManager().KEY_CUSTOM_VAULT, PersistentDataType.BYTE)) {
                 String templateName = pdc.get(plugin.getItemManager().KEY_VAULT_TEMPLATE_NAME, PersistentDataType.STRING);
@@ -171,7 +172,8 @@ public class VaultBlockListener implements Listener {
     @EventHandler(priority = EventPriority.NORMAL)
     public void onVaultDisplayItem(VaultDisplayItemEvent event) {
         Block block = event.getBlock();
-        if (block.getState() instanceof Vault vaultState) {
+        // 此事件對世界上每個活躍寶庫 (含原版試煉密室) 高頻觸發：唯讀 getState(false) 避免每次複製快照
+        if (block.getState(false) instanceof Vault vaultState) {
             PersistentDataContainer pdc = vaultState.getPersistentDataContainer();
             if (pdc.has(plugin.getItemManager().KEY_CUSTOM_VAULT, PersistentDataType.BYTE)) {
                 String templateName = pdc.get(plugin.getItemManager().KEY_VAULT_TEMPLATE_NAME, PersistentDataType.STRING);
@@ -237,7 +239,7 @@ public class VaultBlockListener implements Listener {
         // 2. 右鍵點擊世界上的寶庫方塊
         if (action == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
             Block block = event.getClickedBlock();
-            if (block.getType() == Material.VAULT && block.getState() instanceof Vault vaultState) {
+            if (block.getType() == Material.VAULT && block.getState(false) instanceof Vault vaultState) {
                 PersistentDataContainer pdc = vaultState.getPersistentDataContainer();
                 if (pdc.has(plugin.getItemManager().KEY_CUSTOM_VAULT, PersistentDataType.BYTE)) {
                     event.setCancelled(true); // 攔截原版開鎖，由 CustomLootX 全權處理
@@ -249,9 +251,6 @@ public class VaultBlockListener implements Listener {
                         return;
                     }
 
-                    // 確保方塊已註冊並同步最新外觀
-                    plugin.getVaultTemplateManager().syncVaultBlock(block, templateName);
-
                     Location loc = block.getLocation();
 
                     // A. 檢查手持物品是否為對應鑰匙 (包含 NBT / PDC 防偽)
@@ -260,6 +259,9 @@ public class VaultBlockListener implements Listener {
                     if (!plugin.getItemManager().matchesKey(keyInHand, template.getKeyItem())) {
                         return;
                     }
+
+                    // 確保方塊已註冊並同步最新外觀 (移至鑰匙檢查之後：空手連點寶庫不再觸發方塊與 TileState 重寫)
+                    plugin.getVaultTemplateManager().syncVaultBlock(block, templateName);
 
                     // 檢查寶庫是否正在開獎吐物品中，避免多玩家或多次點擊重疊
                     if (plugin.getVaultTemplateManager().isEjecting(loc)) {
@@ -501,7 +503,7 @@ public class VaultBlockListener implements Listener {
         if (template == null) {
             String blockType = "NORMAL_VAULT";
             if (held.hasItemMeta()) {
-                blockType = held.getItemMeta().getPersistentDataContainer().getOrDefault(
+                blockType = held.getPersistentDataContainer().getOrDefault(
                         plugin.getItemManager().KEY_BLOCK_TYPE,
                         PersistentDataType.STRING,
                         "NORMAL_VAULT"

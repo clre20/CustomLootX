@@ -144,7 +144,7 @@ public class LootTemplate {
         List<LootItem> available = new ArrayList<>();
         double totalWeight = 0.0;
         for (LootItem lootItem : items) {
-            if (!lootItem.isAir() && lootItem.getItem() != null && plugin != null) {
+            if (!lootItem.isAir() && lootItem.peekItem() != null && plugin != null) {
                 if (plugin.getLootLimitManager().isLimitReached("suspicious", this.name, lootItem, playerUuid)) {
                     continue; // 達到上限：沒有這個選項！
                 }
@@ -173,10 +173,10 @@ public class LootTemplate {
 
     public ItemStack rollItem(clre20.customLootX.CustomLootX plugin, java.util.UUID playerUuid) {
         LootItem loot = rollLoot(plugin, playerUuid);
-        if (loot == null || loot.isAir() || loot.getItem() == null) {
+        if (loot == null || loot.isAir() || loot.peekItem() == null) {
             return null;
         }
-        return loot.getItem().clone();
+        return loot.getItem();
     }
 
     public double getItemChance(ItemStack target) {
@@ -187,7 +187,7 @@ public class LootTemplate {
             return 0.0;
         }
         for (LootItem li : items) {
-            if (!li.isAir() && li.getItem() != null && li.getItem().isSimilar(target)) {
+            if (!li.isAir() && li.isSimilarTo(target)) {
                 return li.getChance();
             }
         }
@@ -211,7 +211,7 @@ public class LootTemplate {
         }
         LootItem fallback = null;
         for (LootItem li : items) {
-            if (!li.isAir() && li.getItem() != null && li.getItem().isSimilar(target)) {
+            if (!li.isAir() && li.isSimilarTo(target)) {
                 if (li.isBroadcast()) return li;
                 if (fallback == null) fallback = li;
             }

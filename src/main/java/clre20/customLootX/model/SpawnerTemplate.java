@@ -671,7 +671,7 @@ public class SpawnerTemplate {
         List<LootItem> available = new ArrayList<>();
         double totalWeight = 0.0;
         for (LootItem item : rewards) {
-            if (!item.isAir() && item.getItem() != null && plugin != null) {
+            if (!item.isAir() && item.peekItem() != null && plugin != null) {
                 if (plugin.getLootLimitManager().isLimitReached("spawner", this.name, item, playerUuid)) {
                     continue; // 達到上限：沒有這個選項！
                 }
@@ -713,7 +713,7 @@ public class SpawnerTemplate {
         int count = getRollCount();
         for (int i = 0; i < count; i++) {
             LootItem loot = rollSingleLoot(plugin, playerUuid);
-            if (loot != null && !loot.isAir() && loot.getItem() != null) {
+            if (loot != null && !loot.isAir() && loot.peekItem() != null) {
                 rolled.add(loot);
                 if (plugin != null) {
                     plugin.getLootLimitManager().recordDrop("spawner", this.name, loot, playerUuid);
@@ -728,10 +728,10 @@ public class SpawnerTemplate {
      */
     public ItemStack rollSingleItem() {
         LootItem loot = rollSingleLoot();
-        if (loot == null || loot.isAir() || loot.getItem() == null) {
+        if (loot == null || loot.isAir() || loot.peekItem() == null) {
             return null;
         }
-        return loot.getItem().clone();
+        return loot.getItem();
     }
 
     /**
@@ -740,7 +740,7 @@ public class SpawnerTemplate {
     public List<ItemStack> rollAllItems() {
         List<ItemStack> rolled = new ArrayList<>();
         for (LootItem loot : rollAllLootItems()) {
-            rolled.add(loot.getItem().clone());
+            rolled.add(loot.getItem());
         }
         return rolled;
     }

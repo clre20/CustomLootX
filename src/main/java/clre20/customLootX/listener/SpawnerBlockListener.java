@@ -117,7 +117,8 @@ public class SpawnerBlockListener implements Listener {
         Block block = event.getBlock();
         if (block.getType() != Material.TRIAL_SPAWNER) return;
 
-        if (block.getState() instanceof TrialSpawner tsState) {
+        // 唯讀檢查使用 getState(false)，避免完整複製 TileState/NBT 快照
+        if (block.getState(false) instanceof TrialSpawner tsState) {
             PersistentDataContainer pdc = tsState.getPersistentDataContainer();
             if (pdc.has(plugin.getItemManager().KEY_CUSTOM_SPAWNER, PersistentDataType.BYTE)) {
                 String templateName = pdc.get(plugin.getItemManager().KEY_SPAWNER_TEMPLATE_NAME, PersistentDataType.STRING);
@@ -191,7 +192,7 @@ public class SpawnerBlockListener implements Listener {
         // 2. 右鍵點擊世界上的生怪磚方塊
         if (action == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
             Block block = event.getClickedBlock();
-            if (block.getType() == Material.TRIAL_SPAWNER && block.getState() instanceof TrialSpawner tsState) {
+            if (block.getType() == Material.TRIAL_SPAWNER && block.getState(false) instanceof TrialSpawner tsState) {
                 PersistentDataContainer pdc = tsState.getPersistentDataContainer();
                 if (pdc.has(plugin.getItemManager().KEY_CUSTOM_SPAWNER, PersistentDataType.BYTE)) {
                     String templateName = pdc.get(plugin.getItemManager().KEY_SPAWNER_TEMPLATE_NAME, PersistentDataType.STRING);
@@ -326,7 +327,7 @@ public class SpawnerBlockListener implements Listener {
         SpawnerTemplate template;
 
         if (isBlank) {
-            String blockType = item.getItemMeta().getPersistentDataContainer().get(plugin.getItemManager().KEY_BLOCK_TYPE, PersistentDataType.STRING);
+            String blockType = item.getPersistentDataContainer().get(plugin.getItemManager().KEY_BLOCK_TYPE, PersistentDataType.STRING);
             boolean ominous = "OMINOUS_SPAWNER".equalsIgnoreCase(blockType);
             template = new SpawnerTemplate(
                     "<未設定>",

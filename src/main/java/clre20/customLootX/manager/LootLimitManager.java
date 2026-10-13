@@ -2,6 +2,7 @@ package clre20.customLootX.manager;
 
 import clre20.customLootX.CustomLootX;
 import clre20.customLootX.model.LootItem;
+import clre20.customLootX.util.AsyncIO;
 import clre20.customLootX.util.TextUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
@@ -39,7 +40,7 @@ public class LootLimitManager {
     // date -> (fullKey -> (playerUuid -> count))
     private final Map<String, Map<String, Map<UUID, Integer>>> dailyPlayerCounts = new ConcurrentHashMap<>();
 
-    private boolean dirty = false;
+    private volatile boolean dirty = false;
 
     public LootLimitManager(CustomLootX plugin) {
         this.plugin = plugin;
@@ -55,10 +56,25 @@ public class LootLimitManager {
     private void updateDateCacheIfNeeded() {
         long now = System.currentTimeMillis();
         if (now - lastDateRefreshMillis > 60000L) {
-            cachedTodayKey = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            String newToday = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            boolean dayChanged = !newToday.equals(cachedTodayKey);
+            cachedTodayKey = newToday;
             cachedMonthKey = YearMonth.now().toString();
             lastDateRefreshMillis = now;
+            if (dayChanged) {
+                // 跨日時順便清理過期紀錄，長時間不重啟的伺服器記憶體與檔案也不會無限增長
+                pruneOldRecords();
+                dirty = true;
+            }
         }
+    }
+
+    private String playerName(UUID uuid) {
+        return plugin.getPlayerDataManager() != null ? plugin.getPlayerDataManager().getPlayerName(uuid) : String.valueOf(uuid);
+    }
+
+    private boolean verbose() {
+        return plugin.getConfigManager() != null && plugin.getConfigManager().isVerboseLimitLogs();
     }
 
     private String getTodayKey() {
@@ -75,10 +91,20 @@ public class LootLimitManager {
      * 產生物品在特定模板中的唯一識別 Key
      */
     public String getItemKey(LootItem loot) {
-        if (loot == null || loot.isAir() || loot.getItem() == null) {
+        if (loot == null || loot.isAir() || loot.peekItem() == null) {
             return "AIR";
         }
-        org.bukkit.inventory.ItemStack item = loot.getItem();
+        String cached = loot.getCachedLimitKey();
+        if (cached != null) {
+            return cached;
+        }
+        String key = computeItemKey(loot);
+        loot.setCachedLimitKey(key);
+        return key;
+    }
+
+    private String computeItemKey(LootItem loot) {
+        org.bukkit.inventory.ItemStack item = loot.peekItem();
         String typeName = item.getType().name();
         String name = TextUtil.getItemName(item);
         if (!name.equals(typeName) && !name.isEmpty() && !name.equals("[落空]")) {
@@ -113,8 +139,10 @@ public class LootLimitManager {
         if (loot.getLimitServerDaily() > 0) {
             int currentServerDaily = getServerDailyCount(today, fullKey);
             if (currentServerDaily >= loot.getLimitServerDaily()) {
+                if (verbose()) {
                 String itemName = (loot.getItem() != null) ? TextUtil.getItemName(loot.getItem()) : getItemKey(loot);
                 plugin.logConsole("&6[出貨上限·攔截]&7 物品 &f" + itemName + " &7已達全服每日上限 &c(" + currentServerDaily + "/" + loot.getLimitServerDaily() + ")&7，已自抽獎池移除！");
+                }
                 return true;
             }
         }
@@ -123,8 +151,10 @@ public class LootLimitManager {
         if (loot.getLimitServerMonthly() > 0) {
             int currentServerMonthly = getServerMonthlyCount(currentMonth, fullKey);
             if (currentServerMonthly >= loot.getLimitServerMonthly()) {
+                if (verbose()) {
                 String itemName = (loot.getItem() != null) ? TextUtil.getItemName(loot.getItem()) : getItemKey(loot);
                 plugin.logConsole("&6[出貨上限·攔截]&7 物品 &f" + itemName + " &7已達全服每月上限 &c(" + currentServerMonthly + "/" + loot.getLimitServerMonthly() + ")&7，已自抽獎池移除！");
+                }
                 return true;
             }
         }
@@ -133,16 +163,12 @@ public class LootLimitManager {
         if (playerUuid != null && loot.getLimitPlayerDaily() > 0) {
             int currentPlayerDaily = getPlayerDailyCount(today, fullKey, playerUuid);
             if (currentPlayerDaily >= loot.getLimitPlayerDaily()) {
-                String pName = playerUuid.toString();
-                if (Bukkit.getPlayer(playerUuid) != null) {
-                    pName = Bukkit.getPlayer(playerUuid).getName();
-                } else {
-                    org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(playerUuid);
-                    if (op.getName() != null) pName = op.getName();
-                }
+                if (verbose()) {
+                String pName = playerName(playerUuid);
                 String itemName = (loot.getItem() != null) ? TextUtil.getItemName(loot.getItem()) : getItemKey(loot);
                 plugin.logConsole("&6[出貨上限·攔截]&7 玩家 &f" + pName + " &7於 &e[" + templateType + ":" + templateName + "]&7 的物品 &f" + itemName +
                         " &7已達個人每日上限 &c(" + currentPlayerDaily + "/" + loot.getLimitPlayerDaily() + ")&7，已自抽獎池移除！");
+                }
                 return true;
             }
         }
@@ -151,16 +177,12 @@ public class LootLimitManager {
         if (playerUuid != null && loot.getLimitPlayerTotal() > 0) {
             int currentPlayerTotal = plugin.getPlayerDataManager().getPlayerData(playerUuid).getLootTotalCount(fullKey);
             if (currentPlayerTotal >= loot.getLimitPlayerTotal()) {
-                String pName = playerUuid.toString();
-                if (Bukkit.getPlayer(playerUuid) != null) {
-                    pName = Bukkit.getPlayer(playerUuid).getName();
-                } else {
-                    org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(playerUuid);
-                    if (op.getName() != null) pName = op.getName();
-                }
+                if (verbose()) {
+                String pName = playerName(playerUuid);
                 String itemName = (loot.getItem() != null) ? TextUtil.getItemName(loot.getItem()) : getItemKey(loot);
                 plugin.logConsole("&6[出貨上限·攔截]&7 玩家 &f" + pName + " &7於 &e[" + templateType + ":" + templateName + "]&7 的物品 &f" + itemName +
                         " &7已達個人上限 &c(" + currentPlayerTotal + "/" + loot.getLimitPlayerTotal() + ")&7，已自抽獎池移除！");
+                }
                 return true;
             }
         }
@@ -197,16 +219,12 @@ public class LootLimitManager {
             int newCount = dailyPlayerCounts.computeIfAbsent(today, k -> new ConcurrentHashMap<>())
                     .computeIfAbsent(fullKey, k -> new ConcurrentHashMap<>())
                     .merge(playerUuid, 1, Integer::sum);
-            String pName = playerUuid.toString();
-            if (Bukkit.getPlayer(playerUuid) != null) {
-                pName = Bukkit.getPlayer(playerUuid).getName();
-            } else {
-                org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(playerUuid);
-                if (op.getName() != null) pName = op.getName();
-            }
+            if (verbose()) {
+            String pName = playerName(playerUuid);
             String itemName = (loot.getItem() != null) ? TextUtil.getItemName(loot.getItem()) : getItemKey(loot);
             plugin.logConsole("&a[出貨上限·計數]&7 玩家 &f" + pName + " &7於 &e[" + templateType + ":" + templateName + "]&7 獲得物品 &f" + itemName +
                     "&7，今日個人累計: &e" + newCount + "/" + loot.getLimitPlayerDaily());
+            }
         }
 
         // 累計個人總上限紀錄 (存於 playerdata/[uuid].yml)
@@ -215,16 +233,12 @@ public class LootLimitManager {
             if (pData != null) {
                 if (loot.getLimitPlayerTotal() > 0) {
                     int newTotal = pData.incrementLootTotalCount(fullKey);
-                    String pName = playerUuid.toString();
-                    if (Bukkit.getPlayer(playerUuid) != null) {
-                        pName = Bukkit.getPlayer(playerUuid).getName();
-                    } else {
-                        org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(playerUuid);
-                        if (op.getName() != null) pName = op.getName();
-                    }
+                    if (verbose()) {
+                    String pName = playerName(playerUuid);
                     String itemName = (loot.getItem() != null) ? TextUtil.getItemName(loot.getItem()) : getItemKey(loot);
                     plugin.logConsole("&a[出貨上限·計數]&7 玩家 &f" + pName + " &7於 &e[" + templateType + ":" + templateName + "]&7 獲得物品 &f" + itemName +
                             "&7，個人總計累計: &e" + newTotal + "/" + loot.getLimitPlayerTotal());
+                    }
                 }
                 if (loot.getLimitPlayerDaily() > 0) {
                     pData.incrementLootDailyCount(today, fullKey);
@@ -243,12 +257,7 @@ public class LootLimitManager {
         if (loot == null || loot.getItem() == null) return;
         String playerName = "未知玩家";
         if (playerUuid != null) {
-            org.bukkit.entity.Player p = Bukkit.getPlayer(playerUuid);
-            if (p != null) playerName = p.getName();
-            else {
-                org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(playerUuid);
-                if (op.getName() != null) playerName = op.getName();
-            }
+            playerName = playerName(playerUuid);
         }
         String itemName = TextUtil.getItemName(loot.getItem());
         plugin.getConfigManager().log("limit-blocked",
@@ -426,7 +435,7 @@ public class LootLimitManager {
         }
 
         this.dirty = true;
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, this::save);
+        save(false);
         plugin.logConsole("&a[出貨上限]&7 已重設出貨上限紀錄 (模式: " + mode + (hasKeyword ? ", 關鍵字: " + itemKeyword : "") + ")。");
     }
 
@@ -469,7 +478,7 @@ public class LootLimitManager {
         }
 
         this.dirty = true;
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, this::save);
+        save(false);
     }
 
     /**
@@ -539,26 +548,19 @@ public class LootLimitManager {
     }
 
     /**
-     * 清理超過 35 天的過期歷史紀錄以保證檔案精簡
+     * 清理過期歷史紀錄以保證檔案精簡：
+     * 全服每日紀錄保留 35 天、每月紀錄保留 3 個月；
+     * 個人每日紀錄只有「今天」會被讀取，依 performance.player-daily-retention-days 保留 (預設 7 天)。
      */
     private void pruneOldRecords() {
-        LocalDate cutoff = LocalDate.now().minusDays(35);
-        dailyServerCounts.keySet().removeIf(dateStr -> {
-            try {
-                LocalDate d = LocalDate.parse(dateStr, DateTimeFormatter.ISO_LOCAL_DATE);
-                return d.isBefore(cutoff);
-            } catch (Exception e) {
-                return false;
-            }
-        });
-        dailyPlayerCounts.keySet().removeIf(dateStr -> {
-            try {
-                LocalDate d = LocalDate.parse(dateStr, DateTimeFormatter.ISO_LOCAL_DATE);
-                return d.isBefore(cutoff);
-            } catch (Exception e) {
-                return false;
-            }
-        });
+        LocalDate today = LocalDate.now();
+        String serverCutoff = today.minusDays(35).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        int playerDays = plugin.getConfigManager() != null ? plugin.getConfigManager().getPlayerDailyRetentionDays() : 7;
+        String playerCutoff = today.minusDays(playerDays).format(DateTimeFormatter.ISO_LOCAL_DATE);
+
+        // ISO yyyy-MM-dd 可直接以字串比較日期先後，無需逐一解析 LocalDate
+        dailyServerCounts.keySet().removeIf(dateStr -> isIsoDate(dateStr) && dateStr.compareTo(serverCutoff) < 0);
+        dailyPlayerCounts.keySet().removeIf(dateStr -> isIsoDate(dateStr) && dateStr.compareTo(playerCutoff) < 0);
 
         YearMonth cutoffMonth = YearMonth.now().minusMonths(3);
         monthlyServerCounts.keySet().removeIf(mStr -> {
@@ -571,18 +573,30 @@ public class LootLimitManager {
         });
     }
 
+    private static boolean isIsoDate(String s) {
+        return s != null && s.length() == 10 && s.charAt(4) == '-' && s.charAt(7) == '-';
+    }
+
     /**
-     * 儲存上限紀錄至磁碟
+     * 儲存上限紀錄至磁碟 (同步，供舊呼叫端相容)
      */
-    public synchronized void save() {
+    public void save() {
+        save(true);
+    }
+
+    /**
+     * 儲存上限紀錄：序列化與寫檔都在背景 I/O 佇列執行。
+     * 計數器皆為 ConcurrentHashMap，可安全地在背景執行緒走訪；先清除 dirty 旗標再序列化，期間的新變動會留待下一輪存檔，不會遺失。
+     */
+    public void save(boolean sync) {
         if (!dirty && dataFile.exists()) {
             return;
         }
+        dirty = false;
+        AsyncIO.run(this::writeToDisk, sync || !plugin.isEnabled());
+    }
 
-        if (!dataFile.getParentFile().exists()) {
-            dataFile.getParentFile().mkdirs();
-        }
-
+    private void writeToDisk() {
         YamlConfiguration yaml = new YamlConfiguration();
 
         // 寫入日紀錄 (清單化儲存防 YAML dot 切割)
@@ -640,18 +654,19 @@ public class LootLimitManager {
         }
 
         try {
-            yaml.save(dataFile);
-            this.dirty = false;
+            AsyncIO.writeYamlAtomic(yaml, dataFile);
         } catch (IOException e) {
+            dirty = true; // 下一輪重試
             plugin.logError("&c[出貨上限·儲存]&c 儲存出貨上限紀錄檔案失敗: " + e.getMessage());
         }
     }
 
     private void startAutoSaveTask() {
-        // 每 30 秒異步巡檢儲存髒資料
-        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
+        // 每 30 秒檢查一次：僅在有變動時才排入背景 I/O 佇列寫檔
+        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            updateDateCacheIfNeeded();
             if (dirty) {
-                save();
+                save(false);
             }
         }, 20L * 30L, 20L * 30L);
     }

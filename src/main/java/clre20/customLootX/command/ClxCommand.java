@@ -510,6 +510,8 @@ public class ClxCommand implements CommandExecutor, TabCompleter {
         plugin.getTemplateManager().loadAll();
         plugin.getVaultTemplateManager().loadAll();
         plugin.getSpawnerTemplateManager().loadAll();
+        // 先把記憶體中尚未落盤的計數寫入 (背景存檔有最多 30 秒延遲)，再重新讀取，避免重載時遺失最新出貨紀錄
+        plugin.getLootLimitManager().save(true);
         plugin.getLootLimitManager().load();
         plugin.getConfigManager().send(sender, "reload-success");
         plugin.getConfigManager().log("cmd-reload", "%sender%", sender.getName(), "%label%", label);

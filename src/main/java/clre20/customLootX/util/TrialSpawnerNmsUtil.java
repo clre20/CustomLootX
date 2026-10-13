@@ -21,6 +21,9 @@ import java.util.logging.Logger;
 public class TrialSpawnerNmsUtil {
 
     private static boolean initialized = false;
+    // 初始化只嘗試一次：失敗 (例如伺服器版本不相容) 時不再於每次呼叫重複反射查找與刷屏
+    private static boolean initAttempted = false;
+    private static Constructor<?> compoundTagConstructor;
 
     // CraftWorld / Level
     private static Method craftWorldGetHandleMethod;
@@ -58,7 +61,8 @@ public class TrialSpawnerNmsUtil {
     private static BlockData barrierData;
 
     public static synchronized void init(Logger logger) {
-        if (initialized) return;
+        if (initialized || initAttempted) return;
+        initAttempted = true;
         try {
             // 1. CraftWorld & Level
             Class<?> craftWorldClass = Class.forName("org.bukkit.craftbukkit.CraftWorld");
@@ -106,6 +110,10 @@ public class TrialSpawnerNmsUtil {
 
             // 6. CompoundTag
             compoundTagClass = Class.forName("net.minecraft.nbt.CompoundTag");
+            try {
+                compoundTagConstructor = compoundTagClass.getDeclaredConstructor();
+            } catch (Throwable ignored) {
+            }
             putStringMethod = compoundTagClass.getMethod("putString", String.class, String.class);
 
             // 7. SpawnData
@@ -161,8 +169,8 @@ public class TrialSpawnerNmsUtil {
         if (block == null || block.getType() != Material.TRIAL_SPAWNER || targetType == null) {
             return false;
         }
-        if (!initialized) {
-            init(logger);
+        if (!initialized && !initAttempted) {
+            init(logger); // 只嘗試一次；失敗時仍可走下方 Bukkit API 備援流程
         }
 
         try {
@@ -208,7 +216,7 @@ public class TrialSpawnerNmsUtil {
                     Object stateData = getStateDataMethod.invoke(trialSpawner);
 
                     // 建立 CompoundTag 並寫入 entity id: "minecraft:..."
-                    Object compoundTag = compoundTagClass.getDeclaredConstructor().newInstance();
+                    Object compoundTag = (compoundTagConstructor != null ? compoundTagConstructor : compoundTagClass.getDeclaredConstructor()).newInstance();
                     String mobKey = targetType.getKey().toString();
                     putStringMethod.invoke(compoundTag, "id", mobKey);
 
@@ -292,7 +300,10 @@ public class TrialSpawnerNmsUtil {
      */
     public static void disablePlayerDetector(Block block, Logger logger) {
         if (block == null || block.getType() != Material.TRIAL_SPAWNER) return;
-        if (!initialized) init(logger);
+        if (!initialized) {
+            if (initAttempted) return;
+            init(logger);
+        }
         try {
             Object realBlockEntity = null;
             if (craftWorldGetHandleMethod != null && blockPosConstructor != null && levelGetBlockEntityMethod != null) {
