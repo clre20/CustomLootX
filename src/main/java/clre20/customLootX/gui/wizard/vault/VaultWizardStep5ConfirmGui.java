@@ -67,7 +67,8 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
                         "&7",
                         "&e點擊可返回步驟一修改"
                 ),
-                "%name%", template.getName(),
+                "%name%", clre20.customLootX.util.TemplateFolders.join(template.getFolder(), template.getName()),
+                "%path%", clre20.customLootX.util.TemplateFolders.join(template.getFolder(), template.getName()),
                 "%display%", template.getDisplayName()
         );
         inventory.setItem(5, createButton(Material.NAME_TAG, step1NameName, step1NameLore));
@@ -215,7 +216,8 @@ public class VaultWizardStep5ConfirmGui extends CustomGuiHolder {
                         "&a✔ 已放置於世界的方塊將同步更新",
                         "&a✔ 儲存後即可直接放置於世界上"
                 ),
-                "%name%", template.getName()
+                "%name%", clre20.customLootX.util.TemplateFolders.join(template.getFolder(), template.getName()),
+                "%path%", clre20.customLootX.util.TemplateFolders.join(template.getFolder(), template.getName())
         );
         ItemStack confirmBtn = createButton(Material.EMERALD_BLOCK, confirmName, confirmLore);
         ItemMeta cm = confirmBtn.getItemMeta();

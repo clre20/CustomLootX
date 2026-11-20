@@ -15,6 +15,8 @@ import java.util.concurrent.ThreadLocalRandom;
 public class SpawnerTemplate {
 
     private String name;
+    // 所在資料夾 (相對於 /data/<類型>/，"" 代表根目錄)，只用於整理檔案，不影響識別名稱
+    private String folder = "";
     private boolean ominous;
     private String displayName;
     private EntityType spawnedType;
@@ -745,6 +747,14 @@ public class SpawnerTemplate {
         return rolled;
     }
 
+    public String getFolder() {
+        return folder;
+    }
+
+    public void setFolder(String folder) {
+        this.folder = (folder == null) ? "" : folder;
+    }
+
     /**
      * 複製一份獨立的 SpawnerTemplate 複本
      */
@@ -763,7 +773,7 @@ public class SpawnerTemplate {
                 clonedWaves.add(new ArrayList<>(w));
             }
         }
-        return new SpawnerTemplate(
+        SpawnerTemplate copy = new SpawnerTemplate(
                 this.name,
                 this.ominous,
                 this.displayName,
@@ -787,5 +797,7 @@ public class SpawnerTemplate {
                 clonedRewards,
                 this.broadcastMessage
         );
+        copy.folder = this.folder;
+        return copy;
     }
 }

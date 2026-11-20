@@ -65,7 +65,7 @@ public class VaultWizardStep1Gui extends CustomGuiHolder {
         String name = template.getName();
         boolean hasName = name != null && !name.trim().isEmpty() && !name.equalsIgnoreCase("<未設定>");
 
-        String nameDisplay = hasName ? ("&a" + name) : context.getPlugin().getConfigManager().getText("gui.step1.name-click-to-set", "&c[未設定]");
+        String nameDisplay = hasName ? ("&a" + clre20.customLootX.gui.wizard.NameInputHelper.displayPath(template.getFolder(), name)) : context.getPlugin().getConfigManager().getText("gui.step1.name-click-to-set", "&c[未設定]");
         List<String> nameLore = context.getPlugin().getConfigManager().getStringList(
                 "gui.vault.step1.name-button-lore",
                 List.of(
@@ -143,27 +143,24 @@ public class VaultWizardStep1Gui extends CustomGuiHolder {
             // 點擊設定名稱
             context.getPlugin().getConfigManager().playSound(player, "click");
             context.setTransitioning(true);
+            clre20.customLootX.gui.wizard.NameInputHelper.sendFolderHint(context.getPlugin(), player, context.getTemplate().getFolder());
             context.getPlugin().getChatInputManager().requestInput(
                     player,
                     context.getPlugin().getConfigManager().getRawMessage("name-prompt"),
                     input -> {
                         context.setTransitioning(false);
-                        String trimmed = input.trim();
-                        if (!trimmed.matches("^[a-zA-Z0-9_]+$")) {
-                            context.getPlugin().getConfigManager().send(player, "name-invalid");
-                            context.getPlugin().getConfigManager().playSound(player, "error");
-                        } else {
-                            String origName = context.getOriginalName();
-                            boolean alreadyUsed = context.getPlugin().getVaultTemplateManager().getTemplate(trimmed) != null
-                                    && (!context.isEditingExisting() || (origName != null && !origName.equalsIgnoreCase(trimmed)));
-                            if (alreadyUsed) {
-                                context.getPlugin().getConfigManager().send(player, "name-already-used");
-                                context.getPlugin().getConfigManager().playSound(player, "error");
-                            } else {
-                                context.getTemplate().setName(trimmed);
-                                context.getTemplate().setDisplayName(trimmed);
-                                context.getPlugin().getConfigManager().playSound(player, "success");
+                        String origName = context.getOriginalName();
+                        clre20.customLootX.util.TemplateFolders.NameInput in = clre20.customLootX.gui.wizard.NameInputHelper.validate(
+                                context.getPlugin(), player, input, clre20.customLootX.gui.wizard.NameInputHelper.NAME_BASIC,
+                                n -> context.getPlugin().getVaultTemplateManager().getTemplate(n) != null
+                                        && (!context.isEditingExisting() || (origName != null && !origName.equalsIgnoreCase(n))));
+                        if (in != null) {
+                            context.getTemplate().setName(in.name());
+                            context.getTemplate().setDisplayName(in.name());
+                            if (in.folderSpecified()) {
+                                context.getTemplate().setFolder(in.folder());
                             }
+                            context.getPlugin().getConfigManager().playSound(player, "success");
                         }
                         render();
                         open();

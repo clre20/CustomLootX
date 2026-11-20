@@ -56,7 +56,7 @@ public class SpawnerWizardStep6ConfirmGui extends CustomGuiHolder {
 
         String step1NameName = "&e【步驟一】配置名稱: &a" + template.getName();
         List<String> step1NameLore = List.of(
-                "&7配置檔案路徑: &f/data/spawner/" + template.getName() + ".yml",
+                "&7配置檔案路徑: &f/data/spawner/" + clre20.customLootX.util.TemplateFolders.join(template.getFolder(), template.getName()) + ".yml",
                 "&7遊戲內標題已自動同步為: &f" + template.getDisplayName(),
                 "&7",
                 "&e點擊可返回步驟一修改"

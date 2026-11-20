@@ -19,6 +19,11 @@ public class DraftManager {
     private final File baseDraftsDir;
 
     private final Set<String> activeDraftKeys = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    // 草稿檔頭索引 (draftKey -> 原名 / 建立時間 / 到期時間)：依原名搜尋草稿時不必逐一解析所有草稿檔
+    private final Map<String, DraftMeta> draftMeta = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private record DraftMeta(DraftType type, String draftId, String originalNameLower, long createdTime, long expireTime) {
+    }
 
     public DraftManager(CustomLootX plugin) {
         this.plugin = plugin;
@@ -34,6 +39,7 @@ public class DraftManager {
 
     public void refreshActiveDrafts() {
         activeDraftKeys.clear();
+        draftMeta.clear();
         for (DraftType type : DraftType.values()) {
             File dir = getDraftDir(type);
             if (!dir.exists()) continue;
@@ -42,7 +48,62 @@ public class DraftManager {
             for (File file : files) {
                 String draftId = file.getName().substring(0, file.getName().length() - 4);
                 activeDraftKeys.add(toDraftKey(type, draftId));
+                DraftMeta meta = readHeader(type, draftId, file);
+                if (meta != null) {
+                    draftMeta.put(toDraftKey(type, draftId), meta);
+                }
             }
+        }
+    }
+
+    /**
+     * 只讀草稿檔開頭的 draft 區段 (不解析物品資料)，建立索引
+     */
+    private DraftMeta readHeader(DraftType type, String draftId, File file) {
+        String original = null;
+        long created = 0L;
+        long expire = 0L;
+        boolean inDraft = false;
+        try (java.io.BufferedReader reader = java.nio.file.Files.newBufferedReader(file.toPath(), java.nio.charset.StandardCharsets.UTF_8)) {
+            String line;
+            int count = 0;
+            while ((line = reader.readLine()) != null && count++ < 64) {
+                if (line.isBlank() || line.trim().startsWith("#")) continue;
+                boolean indented = Character.isWhitespace(line.charAt(0));
+                if (!indented) {
+                    if (inDraft) break;
+                    inDraft = line.trim().equals("draft:");
+                    continue;
+                }
+                if (!inDraft) continue;
+                String t = line.trim();
+                int colon = t.indexOf(':');
+                if (colon <= 0) continue;
+                String key = t.substring(0, colon).trim();
+                String val = t.substring(colon + 1).trim();
+                if (val.length() >= 2 && ((val.startsWith("'") && val.endsWith("'")) || (val.startsWith("\"") && val.endsWith("\"")))) {
+                    val = val.substring(1, val.length() - 1).replace("''", "'");
+                }
+                switch (key) {
+                    case "original-name" -> original = val.isEmpty() || val.equals("null") || val.equals("~") ? null : val;
+                    case "created-time" -> created = parseLong(val);
+                    case "expire-time" -> expire = parseLong(val);
+                    default -> {
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        if (!inDraft && created == 0L && expire == 0L) return null;
+        return new DraftMeta(type, draftId, original == null ? null : original.toLowerCase(), created, expire);
+    }
+
+    private static long parseLong(String s) {
+        try {
+            return Long.parseLong(s);
+        } catch (NumberFormatException e) {
+            return 0L;
         }
     }
 
@@ -57,6 +118,15 @@ public class DraftManager {
 
     public File getDraftDir(DraftType type) {
         return new File(baseDraftsDir, type.getFolderName());
+    }
+
+    private static String folderOf(Object templateData) {
+        String folder = null;
+        if (templateData instanceof LootTemplate lt) folder = lt.getFolder();
+        else if (templateData instanceof VaultTemplate vt) folder = vt.getFolder();
+        else if (templateData instanceof SpawnerTemplate st) folder = st.getFolder();
+        String n = clre20.customLootX.util.TemplateFolders.normalize(folder);
+        return n == null ? "" : n;
     }
 
     public int getExpireDays() {
@@ -108,10 +178,16 @@ public class DraftManager {
         } else if (templateData instanceof SpawnerTemplate st) {
             serializeSpawnerTemplate(yaml, st);
         }
+        String folder = folderOf(templateData);
+        if (!folder.isEmpty()) {
+            yaml.set("folder", folder);
+        }
 
         try {
             yaml.save(file);
             activeDraftKeys.add(toDraftKey(type, draftId));
+            draftMeta.put(toDraftKey(type, draftId), new DraftMeta(type, draftId,
+                    originalName == null ? null : originalName.toLowerCase(), now, expireTime));
             return new DraftSession(draftId, type, originalName, now, expireTime, templateData);
         } catch (IOException e) {
             plugin.logError("&c[草稿·儲存]&c 儲存草稿檔案失敗: " + e.getMessage());
@@ -143,6 +219,11 @@ public class DraftManager {
         }
 
         if (templateData == null) return null;
+        String folder = clre20.customLootX.util.TemplateFolders.normalize(yaml.getString("folder", ""));
+        if (folder == null) folder = "";
+        if (templateData instanceof LootTemplate lt) lt.setFolder(folder);
+        else if (templateData instanceof VaultTemplate vt) vt.setFolder(folder);
+        else if (templateData instanceof SpawnerTemplate st) st.setFolder(folder);
 
         return new DraftSession(draftId, type, originalName, createdTime, expireTime, templateData);
     }
@@ -160,25 +241,19 @@ public class DraftManager {
      */
     public DraftSession findDraftByOriginalName(DraftType type, String originalName) {
         if (type == null || originalName == null || originalName.trim().isEmpty()) return null;
-        File dir = getDraftDir(type);
-        if (!dir.exists()) return null;
-
-        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
-        if (files == null) return null;
-
-        DraftSession newest = null;
-        for (File file : files) {
-            String draftId = file.getName().substring(0, file.getName().length() - 4);
-            DraftSession session = loadDraft(type, draftId);
-            if (session != null && !session.isExpired()) {
-                if (originalName.equalsIgnoreCase(session.getOriginalName())) {
-                    if (newest == null || session.getCreatedTime() > newest.getCreatedTime()) {
-                        newest = session;
-                    }
-                }
+        String lower = originalName.toLowerCase();
+        long now = System.currentTimeMillis();
+        DraftMeta newest = null;
+        for (DraftMeta meta : draftMeta.values()) {
+            if (meta.type() != type || !lower.equals(meta.originalNameLower())) continue;
+            if (meta.expireTime() > 0 && now > meta.expireTime()) continue;
+            if (newest == null || meta.createdTime() > newest.createdTime()) {
+                newest = meta;
             }
         }
-        return newest;
+        if (newest == null) return null;
+        DraftSession session = loadDraft(type, newest.draftId());
+        return (session != null && !session.isExpired()) ? session : null;
     }
 
     /**
@@ -186,21 +261,12 @@ public class DraftManager {
      */
     public boolean deleteDraftByOriginalName(DraftType type, String originalName) {
         if (type == null || originalName == null || originalName.trim().isEmpty()) return false;
-        File dir = getDraftDir(type);
-        if (!dir.exists()) return false;
-
-        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".yml"));
-        if (files == null) return false;
-
+        String lower = originalName.toLowerCase();
         boolean deleted = false;
-        for (File file : files) {
-            String draftId = file.getName().substring(0, file.getName().length() - 4);
-            DraftSession session = loadDraft(type, draftId);
-            if (session != null && originalName.equalsIgnoreCase(session.getOriginalName())) {
-                if (file.delete()) {
-                    activeDraftKeys.remove(toDraftKey(type, draftId));
-                    deleted = true;
-                }
+        for (DraftMeta meta : new ArrayList<>(draftMeta.values())) {
+            if (meta.type() != type || !lower.equals(meta.originalNameLower())) continue;
+            if (deleteDraft(type, meta.draftId())) {
+                deleted = true;
             }
         }
         return deleted;
@@ -212,6 +278,7 @@ public class DraftManager {
     public boolean deleteDraft(DraftType type, String draftId) {
         if (type == null || draftId == null || draftId.trim().isEmpty()) return false;
         activeDraftKeys.remove(toDraftKey(type, draftId));
+        draftMeta.remove(toDraftKey(type, draftId));
         File file = new File(getDraftDir(type), draftId + ".yml");
         if (file.exists()) {
             return file.delete();
@@ -234,12 +301,14 @@ public class DraftManager {
 
             for (File file : files) {
                 try {
-                    YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
-                    long expire = yaml.getLong("draft.expire-time", 0);
+                    String draftId = file.getName().substring(0, file.getName().length() - 4);
+                    DraftMeta meta = draftMeta.get(toDraftKey(type, draftId));
+                    if (meta == null) meta = readHeader(type, draftId, file);
+                    long expire = meta != null ? meta.expireTime() : 0L;
                     if (expire > 0 && now > expire) {
-                        String draftId = file.getName().substring(0, file.getName().length() - 4);
                         if (file.delete()) {
                             activeDraftKeys.remove(toDraftKey(type, draftId));
+                            draftMeta.remove(toDraftKey(type, draftId));
                             cleaned++;
                         }
                     }

@@ -11,6 +11,8 @@ import java.util.concurrent.ThreadLocalRandom;
 public class LootTemplate {
 
     private String name;
+    // 所在資料夾 (相對於 /data/<類型>/，"" 代表根目錄)，只用於整理檔案，不影響識別名稱
+    private String folder = "";
     private Material type;
     private String displayName;
     private boolean resetEnabled;
@@ -219,7 +221,17 @@ public class LootTemplate {
         return fallback;
     }
 
+    public String getFolder() {
+        return folder;
+    }
+
+    public void setFolder(String folder) {
+        this.folder = (folder == null) ? "" : folder;
+    }
+
     public LootTemplate cloneTemplate() {
-        return new LootTemplate(this.name, this.type, this.displayName, this.resetEnabled, this.resetSeconds, this.items, this.broadcastMessage);
+        LootTemplate copy = new LootTemplate(this.name, this.type, this.displayName, this.resetEnabled, this.resetSeconds, this.items, this.broadcastMessage);
+        copy.folder = this.folder;
+        return copy;
     }
 }
