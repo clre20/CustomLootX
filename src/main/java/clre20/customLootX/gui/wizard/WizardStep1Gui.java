@@ -66,7 +66,7 @@ public class WizardStep1Gui extends CustomGuiHolder {
         String unsetStr = context.getPlugin().getConfigManager().getText("gui.step1.name-unset", "<未設定>");
         String clickToSetStr = context.getPlugin().getConfigManager().getText("gui.step1.name-click-to-set", "&c[點擊設定]");
 
-        String pathStr = hasValidName ? currentName : unsetStr;
+        String pathStr = hasValidName ? clre20.customLootX.util.TemplateFolders.join(template.getFolder(), currentName) : unsetStr;
         String nameStatusStr = hasValidName ? "&a" + currentName : clickToSetStr;
 
         List<String> nameLore = context.getPlugin().getConfigManager().getStringList(
@@ -152,17 +152,23 @@ public class WizardStep1Gui extends CustomGuiHolder {
                 // Input name in chat
                 context.getPlugin().getConfigManager().playSound(player, "click");
                 context.setTransitioning(true);
+                NameInputHelper.sendFolderHint(context.getPlugin(), player, template.getFolder());
                 context.getPlugin().getChatInputManager().requestInput(
                         player,
                         context.getPlugin().getConfigManager().getRawMessage("name-prompt"),
                         input -> {
                             context.setTransitioning(false);
-                            if (!input.matches("^[a-zA-Z0-9_-]+$")) {
-                                context.getPlugin().getConfigManager().send(player, "name-invalid");
-                                context.getPlugin().getConfigManager().playSound(player, "error");
-                            } else {
-                                template.setName(input);
-                                template.setDisplayName(input);
+                            String origName = context.getOriginalName();
+                            clre20.customLootX.util.TemplateFolders.NameInput in = NameInputHelper.validate(
+                                    context.getPlugin(), player, input, NameInputHelper.NAME_WITH_DASH,
+                                    n -> context.getPlugin().getTemplateManager().getTemplate(n) != null
+                                            && (origName == null || !origName.equalsIgnoreCase(n)));
+                            if (in != null) {
+                                template.setName(in.name());
+                                template.setDisplayName(in.name());
+                                if (in.folderSpecified()) {
+                                    template.setFolder(in.folder());
+                                }
                                 context.getPlugin().getConfigManager().playSound(player, "success");
                             }
                             render();
