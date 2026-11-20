@@ -14,6 +14,8 @@ import java.util.concurrent.ThreadLocalRandom;
 public class VaultTemplate {
 
     private String name;
+    // 所在資料夾 (相對於 /data/<類型>/，"" 代表根目錄)，只用於整理檔案，不影響識別名稱
+    private String folder = "";
     private boolean ominous;
     private String displayName;
     private ItemStack keyItem;
@@ -231,6 +233,14 @@ public class VaultTemplate {
         return rolled;
     }
 
+    public String getFolder() {
+        return folder;
+    }
+
+    public void setFolder(String folder) {
+        this.folder = (folder == null) ? "" : folder;
+    }
+
     /**
      * 複製一份獨立的 VaultTemplate 複本
      */
@@ -240,7 +250,7 @@ public class VaultTemplate {
             clonedItems.add(item.cloneItem());
         }
         ItemStack clonedKey = (this.keyItem != null) ? this.keyItem.clone() : null;
-        return new VaultTemplate(
+        VaultTemplate copy = new VaultTemplate(
                 this.name,
                 this.ominous,
                 this.displayName,
@@ -251,5 +261,7 @@ public class VaultTemplate {
                 clonedItems,
                 this.broadcastMessage
         );
+        copy.folder = this.folder;
+        return copy;
     }
 }

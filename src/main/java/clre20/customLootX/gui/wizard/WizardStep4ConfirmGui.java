@@ -68,7 +68,8 @@ public class WizardStep4ConfirmGui extends CustomGuiHolder {
                         "&7",
                         "&e點擊可返回步驟一修改"
                 ),
-                "%name%", template.getName(),
+                "%name%", clre20.customLootX.util.TemplateFolders.join(template.getFolder(), template.getName()),
+                "%path%", clre20.customLootX.util.TemplateFolders.join(template.getFolder(), template.getName()),
                 "%display%", template.getDisplayName()
         );
         inventory.setItem(5, createButton(Material.NAME_TAG, step1NameName, step1NameLore));

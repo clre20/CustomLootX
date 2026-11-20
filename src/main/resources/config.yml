@@ -28,6 +28,10 @@ performance:
   player-daily-retention-days: 7
   # 寶庫 / 生怪磚 / 考古重置等運行期資料的自動存檔間隔 (秒，最小 5)。資料只在有變動時才寫入，且於背景執行
   runtime-save-interval-seconds: 30
+  # 讀取 /data 配置檔時的平行執行緒數 (1 = 依序讀取)。執行緒只在讀取期間存在，讀完即關閉；/clx reload 會在背景讀取，不卡主執行緒
+  template-load-threads: 4
+  # 區塊載入時，每 tick 最多同步幾個自訂寶庫 / 生怪磚方塊 (其餘排到下一 tick)，避免副本區塊大量載入時同一 tick 尖峰
+  chunk-sync-per-tick: 16
 
 # ------------------------------------------------------------------------------
 # 系統與戰鬥功能設定
@@ -117,22 +121,29 @@ messages:
   create-usage: "&c用法: /%label% create <suspicious|vault|spawner>"
 
   # /clx give 語法錯誤提示
-  give-usage: "&c用法: /%label% give <suspicious|vault|spawner> <名稱> [給誰] [數量]"
+  give-usage: "&c用法: /%label% give <suspicious|vault|spawner> [資料夾] <名稱> [給誰] [數量]"
 
   # 主控台執行 /clx give 未填寫目標玩家時的錯誤
-  give-console-target-required: "&c主控台執行時必須指定目標玩家！用法: /%label% give <suspicious|vault|spawner> <名稱> <給誰> [數量]"
+  give-console-target-required: "&c主控台執行時必須指定目標玩家！用法: /%label% give <suspicious|vault|spawner> [資料夾] <名稱> <給誰> [數量]"
 
   # 找不到指定的目標玩家
   player-not-found: "&c找不到目標玩家: %player%"
 
   # /clx edit 語法錯誤提示
-  edit-usage: "&c用法: /%label% edit <suspicious|vault|spawner> <名稱>"
+  edit-usage: "&c用法: /%label% edit <suspicious|vault|spawner> [資料夾] <名稱>"
 
   # /clx delete 語法錯誤提示
-  delete-usage: "&c用法: /%label% delete <suspicious|vault|spawner> <名稱>"
+  delete-usage: "&c用法: /%label% delete <suspicious|vault|spawner> [資料夾] <名稱>"
 
   # /clx reload 重載成功提示
-  reload-success: "&aCustomLootX 設定與所有資料重載完成！"
+  # %ms%: 總耗時, %read_ms%: 背景讀檔耗時, %apply_ms%: 主執行緒套用耗時
+  reload-success: "&aCustomLootX 設定與所有資料重載完成！&7(背景讀取 %read_ms% ms，主執行緒 %apply_ms% ms)"
+
+  # /clx reload 開始在背景讀取配置檔
+  reload-started: "&e正在背景重新讀取所有配置檔，完成後會通知你…"
+
+  # 重載尚未完成時又執行一次 /clx reload
+  reload-in-progress: "&c上一次重載尚未完成，請稍候再試！"
 
   # 創建全新寶庫草稿物品提示
   vault-template-created: "&a已創建全新自訂試煉寶庫！"
@@ -189,7 +200,13 @@ messages:
   input-success: "&a已將物品機率調整為: &e%chance%&a！"
 
   # 聊天室輸入配置名稱提示
-  name-prompt: "&e請在聊天室輸入配置識別名稱 (英文字母、數字與底線)，輸入 &ccancel &e取消："
+  name-prompt: "&e請在聊天室輸入配置識別名稱 (英文字母、數字與底線；可寫成 &f資料夾/名稱&e)，輸入 &ccancel &e取消："
+
+  # 名稱輸入的資料夾說明 (%folder%: 目前所在資料夾)
+  name-folder-hint: "&7輸入 &f資料夾/名稱 &7可放進資料夾 (例如 &fdungeon1/boss&7，最多 5 層)；輸入 &f/名稱 &7放回根目錄；只輸入名稱則維持目前位置: &f%folder%"
+
+  # 名稱輸入中的資料夾格式錯誤
+  folder-invalid: "&c資料夾名稱無效！每層只能使用英文字母、數字、底線與減號 (最多 32 字)，最多 5 層。"
 
   # 尚未設定配置名稱提示
   name-not-set: "&c必須先設定有效的配置名稱！"
@@ -234,7 +251,7 @@ messages:
   key-copy-empty: "&c請先用滑鼠手持物品後再點擊此格以複製外觀！"
 
   # /clx key 語法提示
-  cmd-key-usage: "&c用法: /%label% key <寶庫名稱> [玩家] [數量]"
+  cmd-key-usage: "&c用法: /%label% key [資料夾] <寶庫名稱> [玩家] [數量]"
 
   # 給予鑰匙成功提示
   cmd-key-give: "&a已給予玩家 &e%player% &f%amount% 把 &e[%name%] &a專屬防偽鑰匙！"
@@ -249,12 +266,12 @@ messages:
 commands:
   help:
     header: "&8============ &6CustomLootX 指令清單 &8============"
-    create: "&e/%label% create <suspicious|vault> &7- 創建全新空白可疑方塊或試煉寶庫"
-    give: "&e/%label% give <suspicious|vault> <名稱> [給誰] [數量] &7- 取得或給予已設定好的方塊"
-    key: "&e/%label% key <寶庫名稱> [給誰] [數量] &7- 發放指定寶庫的專屬防偽鑰匙"
-    edit: "&e/%label% edit <suspicious|vault> <名稱> &7- 直接開啟指定配置的步驟引導介面"
-    list: "&e/%label% list &7- 列出所有已儲存的可疑方塊配置"
-    delete: "&e/%label% delete <名稱> &7- 刪除指定的配置檔案"
+    create: "&e/%label% create <suspicious|vault|spawner> [ominous|normal] &7- 創建全新空白可疑方塊、試煉寶庫或生怪磚"
+    give: "&e/%label% give <suspicious|vault|spawner> [資料夾] <名稱> [給誰] [數量] &7- 取得或給予已設定好的方塊"
+    key: "&e/%label% key [資料夾] <寶庫名稱> [給誰] [數量] &7- 發放指定寶庫的專屬防偽鑰匙"
+    edit: "&e/%label% edit <suspicious|vault|spawner> [資料夾] <名稱> &7- 直接開啟指定配置的步驟引導介面"
+    list: "&e/%label% list [suspicious|vault|spawner] [資料夾] &7- 依資料夾列出已儲存的配置"
+    delete: "&e/%label% delete <suspicious|vault|spawner> [資料夾] <名稱> &7- 刪除指定的配置檔案"
     reload: "&e/%label% reload &7- 重新讀取設定與資料檔"
     checklimit: "&e/%label% checklimit [玩家|all] &7- 查詢今日物品已出貨累計次數"
     resetlimit: "&e/%label% resetlimit <玩家|all> [daily|total|all] [物品] &7- 重設每日或終生出貨上限紀錄"
@@ -270,6 +287,17 @@ commands:
     invalid-chance: "&c[%chance%]"
     reset-on: "&b[重置: %time%]"
     reset-off: "&8[無重置]"
+    # 資料夾分類顯示 (%type%: 類型標題, %count%: 數量, %folders%: 資料夾數, %folder%: 資料夾, %location%: 目前位置, %key%: 類型代號)
+    usage: "&c用法: /%label% list [suspicious|vault|spawner] [資料夾]"
+    title-suspicious: "&e【可疑方塊配置】"
+    title-vault: "&6【試煉寶庫配置】"
+    title-spawner: "&5【試煉生怪磚配置】"
+    type-summary: "%type% &7共 &f%count% &7個配置、&f%folders% &7個資料夾 &8(/%label% list %key% [資料夾])"
+    type-header: "%type% &7- &f%location%"
+    root: "根目錄"
+    folder-line: " &6📁 %folder%/ &7(%count% 個)"
+    empty-folder: "&7(此處沒有任何配置)"
+    folder-not-found: "&c找不到資料夾: &e%folder%"
     footer: "&8=================================================="
 
 # ------------------------------------------------------------------------------

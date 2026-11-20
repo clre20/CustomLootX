@@ -53,6 +53,13 @@
 * 設定儲存後，線上所有玩家手持與背包內同配置的樣板方塊，Lore 說明均自動更新為最新數據。
 * 世界上已放置的生怪磚與寶庫採用動態讀取架構，**後台或 GUI 修改設定後，地圖上無需手動拆除重建即可即時套用最新參數**！
 
+### 7. 資料夾分類（大量配置）
+* `/data/suspicious`、`/data/vault`、`/data/spawner` 內可用子資料夾分類，最多 5 層（例如 `data/spawner/dungeon1/floor2/boss.yml`）。資料夾名稱只能用英文字母、數字、底線與減號。
+* 配置名稱（檔名）在同一類型內仍是唯一識別，資料夾只負責整理：直接在後台把檔案搬進資料夾後 `/clx reload` 即可，世界上已放置的方塊與手上的物品不受影響。
+* 指令在名稱前多一個資料夾欄位，例如 `/clx give spawner dungeon1 boss`；放在根目錄的配置不用填資料夾。也接受 `dungeon1/boss` 寫法，或只打名稱。
+* 精靈輸入名稱時可寫 `資料夾/名稱` 放進資料夾、`/名稱` 放回根目錄；只寫名稱則維持原本位置。
+* 同名檔案出現在不同資料夾時，保留較淺層的那一個並在後台警告。
+
 ---
 
 ## 指令與權限說明
@@ -62,14 +69,14 @@
 | 指令 | 說明 |
 | :--- | :--- |
 | `/clx create <suspicious\|vault\|spawner> [ominous\|normal]` | 創建全新自訂樣板物品（手持對空氣右鍵進入精靈引導） |
-| `/clx give <suspicious\|vault\|spawner> <名稱> [玩家] [數量]` | 取得或給予指定玩家已設定好的樣板方塊（控制台必填玩家） |
-| `/clx key <寶庫名稱> [玩家] [數量]` | 發放指定寶庫的專屬防偽解鎖鑰匙 |
-| `/clx edit <suspicious\|vault\|spawner> <名稱>` | 直接開啟現有模板進行步驟修改（純淨無草稿模式） |
-| `/clx list [suspicious\|vault\|spawner]` | 列出所有或指定分類下已儲存的配置及其冷卻/重置狀態 |
-| `/clx delete <suspicious\|vault\|spawner> <名稱>` | 刪除指定的配置檔案並同步清除草稿 |
+| `/clx give <suspicious\|vault\|spawner> [資料夾] <名稱> [玩家] [數量]` | 取得或給予指定玩家已設定好的樣板方塊（控制台必填玩家） |
+| `/clx key [資料夾] <寶庫名稱> [玩家] [數量]` | 發放指定寶庫的專屬防偽解鎖鑰匙 |
+| `/clx edit <suspicious\|vault\|spawner> [資料夾] <名稱>` | 直接開啟現有模板進行步驟修改（純淨無草稿模式） |
+| `/clx list [suspicious\|vault\|spawner] [資料夾]` | 不帶參數顯示各類型數量與資料夾；指定類型 (與資料夾) 時列出該層的子資料夾與配置 |
+| `/clx delete <suspicious\|vault\|spawner> [資料夾] <名稱>` | 刪除指定的配置檔案並同步清除草稿 |
 | `/clx checklimit [玩家\|all]` | 查詢今日出貨累計次數與個人累積總出貨（終生上限），可查自己、指定玩家或全體玩家 |
 | `/clx resetlimit <玩家\|all> [daily\|total\|all] [物品關鍵字]` | 重設指定玩家或全服玩家的戰利品出貨額度上限（支援 `daily` 每日 / `total` 終生 / `all` 全部，可選填物品關鍵字過濾） |
-| `/clx reload` | 重新載入所有設定檔、模板資料、玩家數據與執行中計時器 |
+| `/clx reload` | 重新載入設定檔與所有模板（模板在背景平行讀取，主執行緒只做最後替換） |
 | `/clx help` | 顯示完整的指令清單與用法說明 |
 
 ---
@@ -140,6 +147,13 @@ It seamlessly integrates the core mechanics of 1.21: **Custom Suspicious Blocks*
 - Saved item templates in hand or in inventories update their lore details instantly.
 - Placed blocks dynamically read configurations—**changes take effect in-game without needing to break and replace blocks!**
 
+### 7. Folder Organization (Large Setups)
+- Templates under `/data/suspicious`, `/data/vault` and `/data/spawner` can be grouped into sub-folders, up to 5 levels deep (e.g. `data/spawner/dungeon1/floor2/boss.yml`). Folder names may use letters, digits, `_` and `-`.
+- The template name (file name) stays the unique ID within its type; folders are for organization only. Move files into folders and run `/clx reload` — placed blocks and items keep working.
+- Commands take an optional folder before the name, e.g. `/clx give spawner dungeon1 boss`; templates in the root need no folder. `dungeon1/boss` or just the name also work.
+- In the wizard, type `folder/name` to save into a folder, `/name` to move back to the root, or just the name to keep the current folder.
+- If the same name exists in two folders, the shallower one is kept and a warning is logged.
+
 ---
 
 ## Commands & Permissions
@@ -149,14 +163,14 @@ The primary command prefix is `/clx` (alias: `/customlootx`). All administrative
 | Command | Description |
 | :--- | :--- |
 | `/clx create <suspicious\|vault\|spawner> [ominous\|normal]` | Create a new custom template item (Right-click air while holding to open wizard) |
-| `/clx give <suspicious\|vault\|spawner> <name> [player] [amount]` | Give configured template blocks to yourself or a specified player |
-| `/clx key <vault_name> [player] [amount]` | Grant the dedicated authentic key for a specific vault |
-| `/clx edit <suspicious\|vault\|spawner> <name>` | Open the setup wizard for an existing template (Clean No-Draft Mode) |
-| `/clx list [suspicious\|vault\|spawner]` | List all saved configurations and their cooldown/reset status |
-| `/clx delete <suspicious\|vault\|spawner> <name>` | Delete a specified configuration profile and clean up related drafts |
+| `/clx give <suspicious\|vault\|spawner> [folder] <name> [player] [amount]` | Give configured template blocks to yourself or a specified player |
+| `/clx key [folder] <vault_name> [player] [amount]` | Grant the dedicated authentic key for a specific vault |
+| `/clx edit <suspicious\|vault\|spawner> [folder] <name>` | Open the setup wizard for an existing template (Clean No-Draft Mode) |
+| `/clx list [suspicious\|vault\|spawner] [folder]` | Without arguments: per-type counts and folders; with a type (and folder): sub-folders and templates at that level |
+| `/clx delete <suspicious\|vault\|spawner> [folder] <name>` | Delete a specified configuration profile and clean up related drafts |
 | `/clx checklimit [player\|all]` | Inspect claimed daily and lifetime quotas for yourself, a specific player, or all players |
 | `/clx resetlimit <player\|all> [daily\|total\|all] [item_keyword]` | Reset loot claim quotas for a specific player or all players (supports `daily`, `total` lifetime, or `all`, with optional item keyword filter) |
-| `/clx reload` | Reload all configuration files, template data, player data, and active runtimers |
+| `/clx reload` | Reload configuration and all templates (templates are read in parallel in the background; the main thread only swaps them in) |
 | `/clx help` | Display the full list of commands and syntax guide |
 
 ---

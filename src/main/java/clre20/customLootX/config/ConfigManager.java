@@ -27,6 +27,8 @@ public class ConfigManager {
     private volatile boolean verboseLimitLogs = false;
     private volatile int playerDailyRetentionDays = 7;
     private volatile int runtimeSaveIntervalSeconds = 30;
+    private volatile int templateLoadThreads = 4;
+    private volatile int chunkSyncPerTick = 16;
 
     public ConfigManager(CustomLootX plugin) {
         this.plugin = plugin;
@@ -35,7 +37,11 @@ public class ConfigManager {
     }
 
     private void initFallbacks() {
-        defaultFallbacks.put("name-prompt", "&e請在聊天室輸入配置識別名稱 (英文字母、數字與底線)，輸入 &ccancel &e取消：");
+        defaultFallbacks.put("name-prompt", "&e請在聊天室輸入配置識別名稱 (英文字母、數字與底線；可寫成 &f資料夾/名稱&e)，輸入 &ccancel &e取消：");
+        defaultFallbacks.put("name-folder-hint", "&7輸入 &f資料夾/名稱 &7可放進資料夾 (例如 &fdungeon1/boss&7，最多 5 層)；輸入 &f/名稱 &7放回根目錄；只輸入名稱則維持目前位置: &f%folder%");
+        defaultFallbacks.put("folder-invalid", "&c資料夾名稱無效！每層只能使用英文字母、數字、底線與減號 (最多 32 字)，最多 5 層。");
+        defaultFallbacks.put("reload-started", "&e正在背景重新讀取所有配置檔，完成後會通知你…");
+        defaultFallbacks.put("reload-in-progress", "&c上一次重載尚未完成，請稍候再試！");
         defaultFallbacks.put("name-invalid", "&c名稱無效！只能包含英文字母、數字與底線，且不能空白。");
         defaultFallbacks.put("name-already-used", "&c該名稱已被其他配置使用，請使用不同的名稱！");
         defaultFallbacks.put("name-not-set", "&c必須先設定有效的配置名稱！");
@@ -56,7 +62,7 @@ public class ConfigManager {
         defaultFallbacks.put("key-craft-success", "&a已成功製作專屬防偽鑰匙！已將 1 把鑰匙發送至您的背包。");
         defaultFallbacks.put("key-copy-success", "&a已成功套用手持物品的外觀材質與模型！");
         defaultFallbacks.put("key-copy-empty", "&c請先用滑鼠手持物品後再點擊此格以複製外觀！");
-        defaultFallbacks.put("cmd-key-usage", "&c用法: /%label% key <寶庫名稱> [玩家] [數量]");
+        defaultFallbacks.put("cmd-key-usage", "&c用法: /%label% key [資料夾] <寶庫名稱> [玩家] [數量]");
         defaultFallbacks.put("cmd-key-give", "&a已給予玩家 &e%player% &f%amount% 把 &e[%name%] &a專屬防偽鑰匙！");
         defaultFallbacks.put("cmd-key-receive", "&a你收到了 &f%amount% 把 &e[%name%] &a專屬防偽鑰匙！");
         defaultFallbacks.put("template-created", "&a已創建自訂%type%方塊！");
@@ -66,10 +72,10 @@ public class ConfigManager {
         defaultFallbacks.put("empty-block-warning", "&c此方塊尚未完成設定！");
         defaultFallbacks.put("cannot-edit-placed", "");
         defaultFallbacks.put("create-usage", "&c用法: /%label% create <suspicious|vault|spawner>");
-        defaultFallbacks.put("give-usage", "&c用法: /%label% give <suspicious|vault|spawner> <名稱> [給誰] [數量]");
-        defaultFallbacks.put("give-console-target-required", "&c主控台執行時必須指定目標玩家！用法: /%label% give <suspicious|vault|spawner> <名稱> <給誰> [數量]");
-        defaultFallbacks.put("edit-usage", "&c用法: /%label% edit <suspicious|vault|spawner> <名稱>");
-        defaultFallbacks.put("delete-usage", "&c用法: /%label% delete <suspicious|vault|spawner> <名稱>");
+        defaultFallbacks.put("give-usage", "&c用法: /%label% give <suspicious|vault|spawner> [資料夾] <名稱> [給誰] [數量]");
+        defaultFallbacks.put("give-console-target-required", "&c主控台執行時必須指定目標玩家！用法: /%label% give <suspicious|vault|spawner> [資料夾] <名稱> <給誰> [數量]");
+        defaultFallbacks.put("edit-usage", "&c用法: /%label% edit <suspicious|vault|spawner> [資料夾] <名稱>");
+        defaultFallbacks.put("delete-usage", "&c用法: /%label% delete <suspicious|vault|spawner> [資料夾] <名稱>");
         defaultFallbacks.put("draft-saved", "&a已為您暫存當前編輯進度至手持方塊中（草稿保留 %days% 天）。");
         defaultFallbacks.put("draft-saved-cmd", "&a已為您暫存當前編輯進度（草稿保留 %days% 天），下次輸入 &e/clx edit &a指令即可繼續編輯！");
         defaultFallbacks.put("draft-loaded", "&a已為您還原上次未儲存的草稿編輯進度！");
@@ -115,6 +121,7 @@ public class ConfigManager {
             }
         } catch (Exception ignored) {
         }
+        fillMissingKeys();
 
         this.prefix = config.getString("prefix", "&8[&6CustomLootX&8] &r");
 
@@ -123,6 +130,8 @@ public class ConfigManager {
         this.verboseLimitLogs = config.getBoolean("performance.verbose-limit-logs", false);
         this.playerDailyRetentionDays = Math.max(1, config.getInt("performance.player-daily-retention-days", 7));
         this.runtimeSaveIntervalSeconds = Math.max(5, config.getInt("performance.runtime-save-interval-seconds", 30));
+        this.templateLoadThreads = Math.max(1, Math.min(16, config.getInt("performance.template-load-threads", 4)));
+        this.chunkSyncPerTick = Math.max(1, Math.min(512, config.getInt("performance.chunk-sync-per-tick", 16)));
         this.logCache.clear();
 
         sounds.clear();
@@ -146,6 +155,62 @@ public class ConfigManager {
                     }
                 } catch (Exception ignored) {
                 }
+            }
+        }
+    }
+
+    /**
+     * 比對預設設定檔，把使用者 config.yml 缺少的項目補上並寫回 (保留使用者原有設定值)
+     */
+    /**
+     * 3.8.0 更新了說明文字的預設值 (加入資料夾欄位)：使用者沒改過的舊預設文字自動換成新版，改過的保持原樣
+     */
+    private static final Map<String, String> UPGRADED_DEFAULTS = new LinkedHashMap<>();
+
+    static {
+        UPGRADED_DEFAULTS.put("messages.give-usage", "&c用法: /%label% give <suspicious|vault|spawner> <名稱> [給誰] [數量]");
+        UPGRADED_DEFAULTS.put("messages.give-console-target-required", "&c主控台執行時必須指定目標玩家！用法: /%label% give <suspicious|vault|spawner> <名稱> <給誰> [數量]");
+        UPGRADED_DEFAULTS.put("messages.edit-usage", "&c用法: /%label% edit <suspicious|vault|spawner> <名稱>");
+        UPGRADED_DEFAULTS.put("messages.delete-usage", "&c用法: /%label% delete <suspicious|vault|spawner> <名稱>");
+        UPGRADED_DEFAULTS.put("messages.reload-success", "&aCustomLootX 設定與所有資料重載完成！");
+        UPGRADED_DEFAULTS.put("messages.cmd-key-usage", "&c用法: /%label% key <寶庫名稱> [玩家] [數量]");
+        UPGRADED_DEFAULTS.put("messages.name-prompt", "&e請在聊天室輸入配置識別名稱 (英文字母、數字與底線)，輸入 &ccancel &e取消：");
+        UPGRADED_DEFAULTS.put("commands.help.create", "&e/%label% create <suspicious|vault> &7- 創建全新空白可疑方塊或試煉寶庫");
+        UPGRADED_DEFAULTS.put("commands.help.give", "&e/%label% give <suspicious|vault> <名稱> [給誰] [數量] &7- 取得或給予已設定好的方塊");
+        UPGRADED_DEFAULTS.put("commands.help.key", "&e/%label% key <寶庫名稱> [給誰] [數量] &7- 發放指定寶庫的專屬防偽鑰匙");
+        UPGRADED_DEFAULTS.put("commands.help.edit", "&e/%label% edit <suspicious|vault> <名稱> &7- 直接開啟指定配置的步驟引導介面");
+        UPGRADED_DEFAULTS.put("commands.help.list", "&e/%label% list &7- 列出所有已儲存的可疑方塊配置");
+        UPGRADED_DEFAULTS.put("commands.help.delete", "&e/%label% delete <名稱> &7- 刪除指定的配置檔案");
+    }
+
+    private void fillMissingKeys() {
+        if (defaultConfig == null) return;
+        int added = 0;
+        for (Map.Entry<String, String> e : UPGRADED_DEFAULTS.entrySet()) {
+            String current = config.getString(e.getKey(), null);
+            if (current != null && config.contains(e.getKey(), true) && current.equals(e.getValue())) {
+                config.set(e.getKey(), defaultConfig.getString(e.getKey()));
+                added++;
+            }
+        }
+        for (String key : defaultConfig.getKeys(true)) {
+            if (defaultConfig.isConfigurationSection(key)) continue;
+            if (!config.contains(key, true)) {
+                config.set(key, defaultConfig.get(key));
+                try {
+                    config.setComments(key, defaultConfig.getComments(key));
+                    config.setInlineComments(key, defaultConfig.getInlineComments(key));
+                } catch (Throwable ignored) {
+                }
+                added++;
+            }
+        }
+        if (added > 0) {
+            try {
+                config.save(new java.io.File(plugin.getDataFolder(), "config.yml"));
+                plugin.getLogger().info("config.yml 已自動補齊或更新 " + added + " 個設定項目。");
+            } catch (java.io.IOException e) {
+                plugin.getLogger().warning("寫回 config.yml 失敗: " + e.getMessage());
             }
         }
     }
@@ -243,6 +308,14 @@ public class ConfigManager {
 
     public int getRuntimeSaveIntervalSeconds() {
         return runtimeSaveIntervalSeconds;
+    }
+
+    public int getTemplateLoadThreads() {
+        return templateLoadThreads;
+    }
+
+    public int getChunkSyncPerTick() {
+        return chunkSyncPerTick;
     }
 
     /**
