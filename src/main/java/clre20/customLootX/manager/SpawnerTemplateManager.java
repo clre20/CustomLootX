@@ -38,6 +38,8 @@ public class SpawnerTemplateManager {
 
     private final CustomLootX plugin;
     private final File spawnerDir;
+    // 資料夾索引：名稱 -> 子資料夾 / 檔案 (支援 /data 內以資料夾分類)
+    private final clre20.customLootX.util.TemplateIndex index = new clre20.customLootX.util.TemplateIndex();
     private final File runtimeFile;
     private final Map<String, SpawnerTemplate> templates = new ConcurrentHashMap<>();
 
@@ -77,32 +79,79 @@ public class SpawnerTemplateManager {
         loadRuntimeData();
     }
 
+    /**
+     * 同步載入全部配置 (啟動時使用；讀檔與解析會平行處理)
+     */
     public void loadAll() {
-        clre20.customLootX.hook.MythicMobHook.resetStatus();
-        templates.clear();
-        if (!spawnerDir.exists()) {
-            spawnerDir.mkdirs();
-            return;
-        }
-
-        File[] files = spawnerDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".yml"));
-        if (files == null) return;
-
-        for (File file : files) {
-            try {
-                SpawnerTemplate template = loadFromFile(file);
-                if (template != null) {
-                    templates.put(template.getName().toLowerCase(), template);
-                }
-            } catch (Exception e) {
-                plugin.logWarn("&5[試煉生怪磚·載入]&c 讀取試煉生怪磚配置檔案失敗: &e" + file.getName() + "&c - " + e.getMessage());
-            }
-        }
-        plugin.logConsole("&5[試煉生怪磚·載入]&7 成功載入 &a" + templates.size() + "&7 個試煉生怪磚配置。");
+        applyLoaded(readAll());
     }
 
-    private SpawnerTemplate loadFromFile(File file) {
-        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+    /**
+     * 讀取並解析所有配置檔 (含子資料夾)。不修改任何共享狀態，可在背景執行緒呼叫
+     */
+    public java.util.List<clre20.customLootX.util.ParallelYamlLoader.Loaded> readAll() {
+        if (!spawnerDir.exists()) {
+            spawnerDir.mkdirs();
+        }
+        java.util.List<clre20.customLootX.util.TemplateFolders.Scanned> files = clre20.customLootX.util.TemplateFolders.scan(spawnerDir,
+                msg -> plugin.logWarn("&5[試煉生怪磚·載入]&c " + msg));
+        return clre20.customLootX.util.ParallelYamlLoader.load(files, plugin.getConfigManager().getTemplateLoadThreads());
+    }
+
+    /**
+     * 套用解析結果 (主執行緒)：轉換為模板並一次替換，重名時保留路徑排序較前者並警告
+     */
+    public void applyLoaded(java.util.List<clre20.customLootX.util.ParallelYamlLoader.Loaded> loaded) {
+        clre20.customLootX.hook.MythicMobHook.resetStatus();
+        Map<String, SpawnerTemplate> next = new HashMap<>();
+        Map<String, String> names = new HashMap<>();
+        Map<String, String> folders = new HashMap<>();
+        Map<String, File> files = new HashMap<>();
+        String baseAbs = spawnerDir.getAbsolutePath();
+        for (clre20.customLootX.util.ParallelYamlLoader.Loaded l : loaded) {
+            File file = l.source().file();
+            String rel = file.getAbsolutePath().startsWith(baseAbs) ? file.getAbsolutePath().substring(baseAbs.length() + 1) : file.getName();
+            if (l.yaml() == null) {
+                plugin.logWarn("&5[試煉生怪磚·載入]&c 讀取試煉生怪磚配置檔案失敗: &e" + rel + "&c - " + l.error());
+                continue;
+            }
+            try {
+                SpawnerTemplate template = loadFromYaml(l.yaml(), file);
+                if (template == null || template.getName() == null || template.getName().trim().isEmpty()) continue;
+                String key = template.getName().toLowerCase();
+                File existing = files.get(key);
+                if (existing != null) {
+                    String existRel = existing.getAbsolutePath().substring(Math.min(existing.getAbsolutePath().length(), baseAbs.length() + 1));
+                    plugin.logWarn("&5[試煉生怪磚·載入]&c 配置名稱重複: &e" + template.getName() + "&c (" + rel + ")，已保留 &e" + existRel + "&c，請改名或刪除其中一個。");
+                    continue;
+                }
+                template.setFolder(l.source().folder());
+                next.put(key, template);
+                names.put(key, template.getName());
+                folders.put(key, l.source().folder());
+                files.put(key, file);
+            } catch (Exception e) {
+                plugin.logWarn("&5[試煉生怪磚·載入]&c 讀取試煉生怪磚配置檔案失敗: &e" + rel + "&c - " + e.getMessage());
+            }
+        }
+        templates.clear();
+        templates.putAll(next);
+        index.replaceAll(names, folders, files);
+        plugin.logConsole("&5[試煉生怪磚·載入]&7 成功載入 &a" + templates.size() + "&7 個試煉生怪磚配置 (&f" + index.folders().size() + "&7 個資料夾)。");
+    }
+
+    // 儲存 / 刪除次數：背景重載期間若有變動，套用時改為重新同步讀取，避免蓋掉剛存的配置
+    private volatile int modCount = 0;
+
+    public int getModCount() {
+        return modCount;
+    }
+
+    public clre20.customLootX.util.TemplateIndex getIndex() {
+        return index;
+    }
+
+    private SpawnerTemplate loadFromYaml(YamlConfiguration yaml, File file) {
         String fileNameNoExt = file.getName().substring(0, file.getName().lastIndexOf('.'));
         String name = yaml.getString("name", fileNameNoExt);
         boolean ominous = yaml.getBoolean("ominous", false);
@@ -254,7 +303,19 @@ public class SpawnerTemplateManager {
             return false;
         }
         String safeName = template.getName().trim();
-        File file = new File(spawnerDir, safeName + ".yml");
+        File file;
+        String folder = clre20.customLootX.util.TemplateFolders.normalize(template.getFolder());
+        if (folder == null) folder = "";
+        try {
+            file = clre20.customLootX.util.TemplateFolders.fileFor(spawnerDir, folder, safeName);
+        } catch (IOException e) {
+            plugin.logError("&5[試煉生怪磚·儲存]&c 配置路徑不合法: &e" + safeName + " &c- " + e.getMessage());
+            return false;
+        }
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
         YamlConfiguration yaml = new YamlConfiguration();
 
         yaml.set("name", safeName);
@@ -336,7 +397,15 @@ public class SpawnerTemplateManager {
 
         try {
             yaml.save(file);
+            // 搬移資料夾或改變大小寫時，移除舊位置的檔案
+            File old = index.fileOf(safeName);
+            if (old != null && !old.getAbsoluteFile().equals(file.getAbsoluteFile()) && old.exists()) {
+                old.delete();
+            }
+            template.setFolder(folder);
             templates.put(safeName.toLowerCase(), template);
+            index.put(safeName, folder, file);
+            modCount++;
             return true;
         } catch (IOException e) {
             plugin.logError("&5[試煉生怪磚·儲存]&c 儲存試煉生怪磚配置失敗: &e" + safeName + " &c- " + e.getMessage());
@@ -348,8 +417,10 @@ public class SpawnerTemplateManager {
         if (name == null) return false;
         String lower = name.toLowerCase();
         SpawnerTemplate removed = templates.remove(lower);
-        File file = new File(spawnerDir, lower + ".yml");
-        if (file.exists()) {
+        File file = index.fileOf(lower);
+        index.remove(lower);
+        modCount++;
+        if (file != null && file.exists()) {
             return file.delete();
         }
         return removed != null;
@@ -567,6 +638,7 @@ public class SpawnerTemplateManager {
         String key = toLocationKey(loc);
         locationCache.remove(key);
         lastPreviewMob.remove(key);
+        pendingChunkSync.remove(key);
         cancelBattleSession(key);
         placedSpawners.remove(key);
         chunkIndex.remove(key);
@@ -691,22 +763,42 @@ public class SpawnerTemplateManager {
         }
     }
 
+    // 區塊載入後待同步的生怪磚 (主執行緒專用)，分散到多個 tick 處理
+    private final LinkedHashSet<String> pendingChunkSync = new LinkedHashSet<>();
+    private BukkitTask chunkSyncTask;
+
     /**
-     * 當區塊載入時，同步區塊內已放置的自訂生怪磚方塊
+     * 當區塊載入時，把區塊內已放置的自訂生怪磚排入同步佇列 (每 tick 最多處理 performance.chunk-sync-per-tick 個)
      */
     public void onChunkLoad(Chunk chunk) {
         if (chunk == null || chunkIndex.isEmpty()) return;
         Set<String> spawnersInChunk = chunkIndex.get(chunk.getWorld().getName(), chunk.getX(), chunk.getZ());
         if (spawnersInChunk.isEmpty()) return;
+        pendingChunkSync.addAll(spawnersInChunk);
+        if (chunkSyncTask == null && plugin.isEnabled()) {
+            chunkSyncTask = Bukkit.getScheduler().runTaskTimer(plugin, this::drainChunkSync, 1L, 1L);
+        }
+    }
 
-        for (String locKey : spawnersInChunk.toArray(new String[0])) {
+    private void drainChunkSync() {
+        int budget = plugin.getConfigManager().getChunkSyncPerTick();
+        Iterator<String> it = pendingChunkSync.iterator();
+        while (budget > 0 && it.hasNext()) {
+            String locKey = it.next();
+            it.remove();
             String templateName = placedSpawners.get(locKey);
             if (templateName == null) continue;
             Location loc = parseLocation(locKey);
-            if (loc != null) {
-                Block block = loc.getBlock();
-                syncSpawnerBlock(block, templateName);
+            if (loc == null || loc.getWorld() == null
+                    || !loc.getWorld().isChunkLoaded(loc.getBlockX() >> 4, loc.getBlockZ() >> 4)) {
+                continue; // 區塊已再次卸載，下次載入時會重新排入
             }
+            syncSpawnerBlock(loc.getBlock(), templateName);
+            budget--;
+        }
+        if (pendingChunkSync.isEmpty() && chunkSyncTask != null) {
+            chunkSyncTask.cancel();
+            chunkSyncTask = null;
         }
     }
 
@@ -769,6 +861,11 @@ public class SpawnerTemplateManager {
             tickerTask.cancel();
             tickerTask = null;
         }
+        if (chunkSyncTask != null) {
+            chunkSyncTask.cancel();
+            chunkSyncTask = null;
+        }
+        pendingChunkSync.clear();
         cancelAllBattles();
     }
 
