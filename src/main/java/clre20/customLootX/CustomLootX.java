@@ -104,6 +104,10 @@ public final class CustomLootX extends JavaPlugin {
             spawnerTemplateManager.startTicker();
         }
 
+        if (getServer().getPluginManager().isPluginEnabled("HttpHub") && clre20.httpHub.api.HttpHubAPI.isAvailable()) {
+            clre20.httpHub.api.HttpHubAPI.registerUpdateCheck(this, "clre20/CustomLootX", getPluginMeta().getVersion(), "customlootx.admin", null);
+        }
+
         logConsole("&a✔ 核心系統已成功啟動！");
     }
 

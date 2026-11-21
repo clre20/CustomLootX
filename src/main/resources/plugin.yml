@@ -5,7 +5,7 @@ api-version: '1.21'
 load: POSTWORLD
 authors: [Clre20]
 description: 自訂可疑沙與可疑礫石掉落物與機率設定插件
-softdepend: [MythicMobs]
+softdepend: [ MythicMobs, HttpHub ]
 
 commands:
   clx:

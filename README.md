@@ -1,6 +1,6 @@
 # CustomLootX
 
-![Release](https://img.shields.io/badge/Release-v3.7.3-orange.svg)
+![Release](https://img.shields.io/badge/Release-v3.8.1-orange.svg)
 ![Version](https://img.shields.io/badge/Minecraft-1.21.x%20%7C%2026.x-brightgreen.svg)
 ![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
 
@@ -92,7 +92,7 @@
 
 # CustomLootX (English)
 
-![Release](https://img.shields.io/badge/Release-v3.7.3-orange.svg)
+![Release](https://img.shields.io/badge/Release-v3.8.1-orange.svg)
 ![Version](https://img.shields.io/badge/Minecraft-1.21.x%20%7C%2026.x-brightgreen.svg)
 ![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
 
@@ -181,3 +181,5 @@ The primary command prefix is `/clx` (alias: `/customlootx`). All administrative
 - **Java Version**: Java 21+.
 - **Optional Dependencies**:
   * [MythicMobs](https://mythiccraft.io/): Required for spawning custom MM entities and resolving base display models.
+
+> **版本檢查提示**：若伺服器有安裝 [HttpHub](https://github.com/clre20/HttpHub)，本插件自動由 HttpHub 集中處理版本檢查與管理員登入通知，避免各插件自開連線與背景執行緒。
