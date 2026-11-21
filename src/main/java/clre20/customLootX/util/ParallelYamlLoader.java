@@ -36,7 +36,7 @@ public final class ParallelYamlLoader {
 
     public static List<Loaded> load(List<TemplateFolders.Scanned> files, int threads) {
         List<Loaded> result = new ArrayList<>(files.size());
-        int n = Math.min(Math.max(1, threads), Math.max(1, Runtime.getRuntime().availableProcessors()));
+        int n = Math.min(Math.max(1, threads), Math.min(4, Math.max(1, Runtime.getRuntime().availableProcessors())));
         n = Math.min(n, (files.size() + PARALLEL_THRESHOLD - 1) / PARALLEL_THRESHOLD);
         if (n <= 1) {
             for (TemplateFolders.Scanned s : files) {
