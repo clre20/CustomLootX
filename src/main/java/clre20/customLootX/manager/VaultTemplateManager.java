@@ -612,8 +612,8 @@ public class VaultTemplateManager {
         }
     }
 
-    // 區塊載入後待同步的寶庫 (主執行緒專用)，分散到多個 tick 處理
-    private final LinkedHashSet<String> pendingChunkSync = new LinkedHashSet<>();
+    // 區塊載入後待同步的寶庫，使用線程安全的 Set 防止並發區塊載入時觸發 ConcurrentModificationException
+    private final java.util.Set<String> pendingChunkSync = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private BukkitTask chunkSyncTask;
 
     /**
@@ -624,6 +624,10 @@ public class VaultTemplateManager {
         java.util.Set<String> keys = chunkIndex.get(chunk.getWorld().getName(), chunk.getX(), chunk.getZ());
         if (keys.isEmpty()) return;
         pendingChunkSync.addAll(keys);
+        ensureChunkSyncTask();
+    }
+
+    private synchronized void ensureChunkSyncTask() {
         if (chunkSyncTask == null && plugin.isEnabled()) {
             chunkSyncTask = Bukkit.getScheduler().runTaskTimer(plugin, this::drainChunkSync, 1L, 1L);
         }
@@ -644,9 +648,13 @@ public class VaultTemplateManager {
             syncVaultBlock(world.getBlockAt(p.x(), p.y(), p.z()), templateName);
             budget--;
         }
-        if (pendingChunkSync.isEmpty() && chunkSyncTask != null) {
-            chunkSyncTask.cancel();
-            chunkSyncTask = null;
+        if (pendingChunkSync.isEmpty()) {
+            synchronized (this) {
+                if (pendingChunkSync.isEmpty() && chunkSyncTask != null) {
+                    chunkSyncTask.cancel();
+                    chunkSyncTask = null;
+                }
+            }
         }
     }
 

@@ -763,8 +763,8 @@ public class SpawnerTemplateManager {
         }
     }
 
-    // 區塊載入後待同步的生怪磚 (主執行緒專用)，分散到多個 tick 處理
-    private final LinkedHashSet<String> pendingChunkSync = new LinkedHashSet<>();
+    // 區塊載入後待同步的生怪磚，使用線程安全的 Set 防止並發區塊載入時觸發 ConcurrentModificationException
+    private final java.util.Set<String> pendingChunkSync = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private BukkitTask chunkSyncTask;
 
     /**
@@ -775,6 +775,10 @@ public class SpawnerTemplateManager {
         Set<String> spawnersInChunk = chunkIndex.get(chunk.getWorld().getName(), chunk.getX(), chunk.getZ());
         if (spawnersInChunk.isEmpty()) return;
         pendingChunkSync.addAll(spawnersInChunk);
+        ensureChunkSyncTask();
+    }
+
+    private synchronized void ensureChunkSyncTask() {
         if (chunkSyncTask == null && plugin.isEnabled()) {
             chunkSyncTask = Bukkit.getScheduler().runTaskTimer(plugin, this::drainChunkSync, 1L, 1L);
         }
@@ -796,9 +800,13 @@ public class SpawnerTemplateManager {
             syncSpawnerBlock(loc.getBlock(), templateName);
             budget--;
         }
-        if (pendingChunkSync.isEmpty() && chunkSyncTask != null) {
-            chunkSyncTask.cancel();
-            chunkSyncTask = null;
+        if (pendingChunkSync.isEmpty()) {
+            synchronized (this) {
+                if (pendingChunkSync.isEmpty() && chunkSyncTask != null) {
+                    chunkSyncTask.cancel();
+                    chunkSyncTask = null;
+                }
+            }
         }
     }
 

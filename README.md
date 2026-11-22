@@ -1,6 +1,6 @@
 # CustomLootX
 
-![Release](https://img.shields.io/badge/Release-v3.8.1-orange.svg)
+![Release](https://img.shields.io/badge/Release-v3.8.2-orange.svg)
 ![Version](https://img.shields.io/badge/Minecraft-1.21.x%20%7C%2026.x-brightgreen.svg)
 ![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
 
@@ -92,7 +92,7 @@
 
 # CustomLootX (English)
 
-![Release](https://img.shields.io/badge/Release-v3.8.1-orange.svg)
+![Release](https://img.shields.io/badge/Release-v3.8.2-orange.svg)
 ![Version](https://img.shields.io/badge/Minecraft-1.21.x%20%7C%2026.x-brightgreen.svg)
 ![Platform](https://img.shields.io/badge/Platform-Paper%20%7C%20Purpur-blue.svg)
 
