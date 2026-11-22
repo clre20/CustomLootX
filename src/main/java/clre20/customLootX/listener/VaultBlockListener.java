@@ -252,23 +252,14 @@ public class VaultBlockListener implements Listener {
                     }
 
                     Location loc = block.getLocation();
-
-                    // A. 檢查手持物品是否為對應鑰匙 (包含 NBT / PDC 防偽)
-                    // 根據需求 1：手持非鑰匙物品或空手右鍵寶庫方塊無須做任何反應
-                    ItemStack keyInHand = player.getInventory().getItemInMainHand();
-                    if (!plugin.getItemManager().matchesKey(keyInHand, template.getKeyItem())) {
-                        return;
-                    }
-
-                    // 確保方塊已註冊並同步最新外觀 (移至鑰匙檢查之後：空手連點寶庫不再觸發方塊與 TileState 重寫)
-                    plugin.getVaultTemplateManager().syncVaultBlock(block, templateName);
+                    plugin.getVaultTemplateManager().registerVault(loc, templateName);
 
                     // 檢查寶庫是否正在開獎吐物品中，避免多玩家或多次點擊重疊
                     if (plugin.getVaultTemplateManager().isEjecting(loc)) {
                         return;
                     }
 
-                    // B. 手持鑰匙時，檢查冷卻與領取資格
+                    // A. 先檢查冷卻與領取資格 (無論是否手持鑰匙，點擊皆給予狀態反饋，對齊生怪磚體驗)
                     long status = plugin.getVaultTemplateManager().checkCooldownStatus(loc, player.getUniqueId(), template);
                     if (status == -1) {
                         plugin.getConfigManager().send(player, "vault-already-rewarded");
@@ -282,7 +273,29 @@ public class VaultBlockListener implements Listener {
                         return;
                     }
 
-                    // C. 成功解鎖：扣除 1 個鑰匙
+                    // B. 檢查手持物品是否為對應鑰匙 (包含 NBT / PDC 防偽)
+                    ItemStack keyInHand = player.getInventory().getItemInMainHand();
+                    if (!plugin.getItemManager().matchesKey(keyInHand, template.getKeyItem())) {
+                        String keyName;
+                        if (template.getKeyItem() != null) {
+                            if (template.getKeyItem().getItemMeta() != null && template.getKeyItem().getItemMeta().hasDisplayName()) {
+                                keyName = TextUtil.toLegacyText(template.getKeyItem().getItemMeta().displayName());
+                            } else {
+                                String friendly = TextUtil.getMaterialFriendlyName(template.getKeyItem().getType());
+                                keyName = friendly != null ? friendly : template.getKeyItem().getType().name();
+                            }
+                        } else {
+                            keyName = template.isOminous() ? "&5不祥試煉鑰匙" : "&6試煉鑰匙";
+                        }
+                        plugin.getConfigManager().send(player, "vault-key-mismatch", "%key%", keyName);
+                        plugin.getConfigManager().playSound(player, "error");
+                        return;
+                    }
+
+                    // C. 驗證鑰匙通過，確保方塊已註冊並同步最新外觀
+                    plugin.getVaultTemplateManager().syncVaultBlock(block, templateName);
+
+                    // D. 成功解鎖：扣除 1 個鑰匙
                     if (keyInHand.getAmount() > 1) {
                         keyInHand.setAmount(keyInHand.getAmount() - 1);
                     } else {
